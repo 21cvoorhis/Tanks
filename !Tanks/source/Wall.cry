@@ -1,0 +1,38 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+//format is intentionally similar to the Graphics2D rectangle function
+
+class Wall{
+	
+	field w; //width
+	field h; //height
+	
+	field left;
+	field right;
+	field top;
+	field bottom;
+	
+	field color;
+	
+	constructor(p, w, h, color){ //p = initial position [x,y]
+		this.w = w;
+		this.h = h;
+		
+		this.left = p[0];
+		this.right = p[0] + w;
+		this.top = p[1];
+		this.bottom = p[1] + h;
+		
+		this.color = color;
+	}
+	
+	function drawWall(){
+		
+		Graphics2D.Draw.rectangle(this.left, this.top, this.w, this.h, this.color[0], this.color[1], this.color[2]);
+		
+	}
+	
+}

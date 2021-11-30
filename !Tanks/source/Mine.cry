@@ -1,0 +1,34 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+class Mine : Object{
+	
+	field timeLeft; //how long mine should stay on screen in seconds
+	
+	constructor(pos, vel, radius, color, timeLeft) : base(pos, vel, radius, color){
+		
+		this.timeLeft = timeLeft;
+		
+	}
+	
+	
+	function updateMine(tanks){
+		
+		//this.collision(tanks);
+		
+		if(this.timeLeft > 0 && this.alive){
+			this.timeLeft = this.timeLeft - DT;
+			this.updatePos();
+		}else{
+			this.alive = false;
+		}
+		
+	}
+	
+	function drawMine(){
+		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.5), this.pos[1]-(this.r*0.5), this.r, this.r, this.color[0], this.color[1], this.color[2]);
+	}
+	
+}
