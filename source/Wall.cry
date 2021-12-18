@@ -1,0 +1,50 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+//format is intentionally similar to the Graphics2D rectangle function
+
+class Wall{
+	
+	field w; //width
+	field h; //height
+	
+	field left;
+	field right;
+	field top;
+	field bottom;
+	
+	field bPoints;
+	field segments;
+	
+	field color;
+	
+	constructor(p, w, h, color){ //p = initial position [x,y]
+		this.w = w;
+		this.h = h;
+		
+		this.left = p[0];
+		this.right = p[0] + w;
+		this.top = p[1];
+		this.bottom = p[1] + h;
+		
+		this.bPoints = [[this.left, this.top], [this.right, this.top], [this.right, this.bottom], [this.left, this.bottom]];
+		this.segments = pointsToSegments(this.bPoints);
+		
+		this.color = color;
+	}
+	
+	function drawWallOutline(){
+		
+		Graphics2D.Draw.rectangle(this.left-2, this.top-2, this.w+4, this.h+4, 0, 0, 0);
+		
+	}
+	
+	function drawWallInside(){
+		
+		Graphics2D.Draw.rectangle(this.left, this.top, this.w, this.h, this.color[0], this.color[1], this.color[2]);
+		
+	}
+	
+}

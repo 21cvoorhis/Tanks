@@ -1,0 +1,109 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+class Bullet : Object{
+	
+	field bouncesLeft; //how many times a bullet can hit a wall
+	field explode; //displays if the bullet should explode or not based on it's death
+	
+	constructor(pos, radius, color, vel, vAngle, bouncesLeft) : base(pos, radius, color){
+		
+		this.vel = vel;
+		this.vAngle = vAngle;
+		
+		this.target[0] = Math.cos(vAngle);
+		this.target[1] = Math.sin(vAngle);
+		this.motion = true;
+		
+		this.bouncesLeft = bouncesLeft;
+		this.explode = false;
+	}
+	
+	//death is automatic after either a bounce or collision with a killing object
+	function updateBullet(walls, wallSegments, tanks){
+		this.collisionBounce(walls, wallSegments);
+		this.collisionKill(tanks);
+	}
+	
+	//checks if bullet is in any walls, and if so checks collisions with valid wall segments
+	function collisionBounce(walls, wallSegments){
+		for(i = 0; i<walls.length; i++){
+			if(pointRectCollision(this.pos, walls[i])){
+				this.bounce(walls[i], wallSegments);
+				return null;
+			}
+		}
+	}
+	
+	function collisionKill(tanks){
+		for(i = 0; i<tanks.length; i++){
+			if(pointQuadCollision(this.pos, tanks[i].bPoints) && tanks[i].alive){
+				this.alive = false;
+				return null;
+			}
+			for(j = 0; j<tanks[i].mines.length; j++){
+				if(circleCircleCollision(this.pos, this.r, tanks[i].mines[j].pos, tanks[i].mines[j].r)){
+					this.alive = false;
+					return null;
+				}
+			}
+			//extra conditions check that the bullet isn't just noting a collision with itself. They're put first so it doesn't have to check every bullet with itself every frame
+			for(j = 0; j<tanks[i].bullets.length; j++){
+				if((this.vAngle != tanks[i].bullets[j].vAngle) && (this.time != tanks[i].bullets[j].time) && circleCircleCollision(this.pos, this.r, tanks[i].bullets[j].pos, tanks[i].bullets[j].r)){
+					this.alive = false;
+					this.explode = true;
+					return null;
+				}
+			}
+		}
+	}
+	
+	function bounce(wall, wallSegments){
+		
+		if(this.bouncesLeft > 0){
+			
+			for(s : wallSegments){
+				if(segmentSegmentIntersection(s, [this.prevPos, this.pos])){
+					if(s[0][0] == s[1][0]){ //x are equal, x bounce
+						this.target[0] = -this.target[0];
+					}
+					if(s[0][1] == s[1][1]){
+						this.target[1] = -this.target[1];
+					}
+				}
+			}
+			
+			this.pos[0] = this.prevPos[0];
+			this.pos[1] = this.prevPos[1];
+			this.vAngle = Math.arctan(this.target[1], this.target[0]);
+			
+			this.bouncesLeft--;
+			
+		}else{
+			this.alive = false;
+			this.explode = true;
+			return null;
+		}
+		
+	}
+	
+	function drawBullet(){
+		
+		buttPoints = [[],[],[],[]];
+		tempAngle = this.vAngle - (Math.PI/2);
+		buttPoints[0] = [(this.r*cos(tempAngle)) + this.pos[0], (this.r*sin(tempAngle)) + this.pos[1]];
+		buttPoints[1] = [(-1*this.r*cos(tempAngle)) + this.pos[0], (-1*this.r*sin(tempAngle)) + this.pos[1]];
+		
+		tempAngle = this.vAngle - Math.PI;
+		buttPoints[2] = [(1.25*this.r*cos(tempAngle)) + buttPoints[1][0], (1.25*this.r*sin(tempAngle)) + buttPoints[1][1]];
+		buttPoints[3] = [(1.25*this.r*cos(tempAngle)) + buttPoints[0][0], (1.25*this.r*sin(tempAngle)) + buttPoints[0][1]];
+		
+		//square butt
+		Graphics2D.Draw.quad(buttPoints[0][0], buttPoints[0][1], buttPoints[1][0], buttPoints[1][1], buttPoints[2][0], buttPoints[2][1], buttPoints[3][0], buttPoints[3][1], this.color[0], this.color[1], this.color[2]);
+		//circle head
+		Graphics2D.Draw.ellipse(this.pos[0]-this.r, this.pos[1]-this.r, this.r*2, this.r*2, this.color[0], this.color[1], this.color[2]);
+	}
+	
+}

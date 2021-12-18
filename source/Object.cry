@@ -1,0 +1,58 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+class Object{
+	
+	//pos vars
+	field pos;
+	field prevPos;
+	field vel;
+	field vAngle; //angle of velocity vector
+	
+	//pathing vars
+	field target; //used for pathfinding and velocity, formatted like pos, but the object's pos is the origin/center
+	field motion; //used to determine if updateObject should run or not
+	
+	//misc vars
+	field alive;
+	field r; //radius of body diagonals for tank, circle for other objects
+	field color;
+	field time;
+	field timeLeft;
+	
+	constructor(pos, radius, color){
+		
+		this.pos = pos;
+		this.prevPos = [-1, -1];
+		this.vel = 0;
+		this.vAngle = 0.0;
+		
+		this.target = [0,0];
+		this.motion = false;
+		
+		this.alive = true;
+		this.r = radius;
+		this.color = color;
+		this.time = 0;
+		this.timeLeft = 0;
+		
+	}
+	
+	function updateObject(){
+		
+		//update pos
+		this.prevPos = this.pos.clone();
+		
+		if(this.motion){
+			this.pos[0] = this.pos[0] + (this.vel * DT * Math.cos(this.vAngle));
+			this.pos[1] = this.pos[1] + (this.vel * DT * Math.sin(this.vAngle));
+		}
+		
+		//update time
+		this.time += DT;
+		
+	}
+	
+}

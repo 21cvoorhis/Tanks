@@ -1,0 +1,223 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+/*
+To do:
+- Make functions assosiated with the various types of moving/shooting
+	- Shooting
+		- Banked: Aim at the player based on one bounce off the wall. 
+		- Lead: Aim at where the player will be (lead the shot). Calculate this with an expanding circle of aim (based on time) and the estimated position of the tank keeping it's current velocity (also based on time)
+	- Planting
+		- Yes: Plants mines based on the passed time argument
+	- Movement
+		- Direct: Move towards the tank using A*
+		- Distance: Like Clyde from PacMan; approach directly unless it's within a certain distance from the tank, then try to escape the range of the tank for a few seconds.
+		If it can't escape (because it would hit a wall), have it switch to direct again.
+	- For each function, take in an argument for max time between actions (maxShotTime, etc.) and pick a random time interval between maxTime and maxTime/2 for each action to count down before it runs again
+- Make the collision box for the enemy tanks a little bigger, it's not satisfying rn
+- Maybe add a little effect if a bullet passes a certain velocity to show it's a fast one? Like the fire from Wii Tanks
+*/
+
+class BadTank : Tank{
+	
+	field shotType;
+	field maxShotTime;
+	field shotTimeLeft;
+	
+	field plantType;
+	field maxPlantTime;
+	field plantTimeLeft;
+	
+	field fleeDistance = 48; //only modify this in the constructor this if a single number is too broad to work
+	field moveType;
+	field moveTime = 0.0;
+	
+	field rotateTimeLeft = 0.0;
+	field rotateDirection = 0; //0 = none, 1 = clockwise, 2 = counterclockwise
+	
+	constructor(pos, radius, color, vel, shotType, maxShotTime, maxBullets, bulletSpeed, bulletBounces, plantType, maxPlantTime, maxMines, mineTime, moveType) : 
+	base(pos, radius, color, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime){
+		
+		this.shotType = shotType;
+		this.maxShotTime = maxShotTime;
+		this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5);
+		
+		this.plantType = plantType;
+		this.maxPlantTime = maxPlantTime;
+		this.plantTimeLeft = mix(this.maxPlantTime, this.maxPlantTime * Random.randomFloat(), 0.5);
+		
+		this.moveType = moveType;
+		
+		this.rotateTimeLeft = mix(5, 5*Random.randomFloat(), 0.75);
+	}
+	
+	//this should be updated to reflect the shooting behavior
+	function updateBadTank(walls, wallSegments, tanks){
+		
+		player = tanks[tanks.length-1];
+		
+		if(this.alive){
+			
+			this.shotTimeLeft -= DT;
+			this.plantTimeLeft -= DT;
+			this.moveTime -= DT;
+			this.rotateTimeLeft -= DT;
+			
+			this.bodyCollisionDie(tanks);
+			this.bodyCollisionWalls(walls);
+			
+			if(player.alive){
+				
+				//decide vAngle for next frame with movement function
+				switch (this.moveType) {
+					case MoveType.DIRECT:
+						this.directMove(walls, player);
+						break;
+					default:
+						break;
+				}
+				
+				
+				//shooting functions
+				switch (this.shotType) {
+					case ShotType.DIRECT:
+						this.directShot(walls, wallSegments, player);
+						break;
+					case ShotType.BANKED:
+						this.bankedShot(walls, wallSegments, player);
+						break;
+					default:
+						break;
+				}
+				
+				//planting functions
+				switch (this.plantType) {
+					case PlantType.YES:
+						this.yesPlant();
+						break;
+					default:
+						break;
+				}
+				
+			}else{
+				this.rotateGun();
+			}
+			
+		}
+		
+	}
+	
+	function directMove(walls, player){
+		
+			
+		
+	}
+	
+	function rotateGun(){
+		if(this.moveType != MoveType.NONE){ //tank isn't stationary, follow the tank's movement
+			this.gAngle = mix(this.gAngle, this.vAngle, 0.1);
+		}else{ //tank is stationary, rotate quasi randomly
+			if(this.rotateDirection == 1){
+				this.gAngle -= Math.PI*DT/3.0;
+			}else if(this.rotateDirection == 2){
+				this.gAngle += Math.PI*DT/3.0;
+			}
+			
+			if(this.rotateTimeLeft <= 0){
+				if(this.rotateDirection == 0){
+					this.rotateDirection = Random.randomInt(1, 3);
+				}else{
+					this.rotateDirection = 0;
+				}
+				this.rotateTimeLeft = mix(3, 3*Random.randomFloat(), 0.5);
+			}
+		}
+	}
+	
+	function clearShot(wallSegments, sourcePos, targetPos, exclude){ //exclude is one passed segment to ignore
+		for(s : wallSegments){
+			if(s != exclude && segmentSegmentIntersection(s, [sourcePos, targetPos])){
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	function directShot(walls, wallSegments, player){ //do the shot timing!!!!!!!!!!!!!!!!!!!!!!!!
+		
+		sAngle = Math.arctan(player.pos[1]-this.pos[1], player.pos[0]-this.pos[0]);
+		count = 0;
+		
+		if(this.clearShot(wallSegments, this.pos, player.pos, null)){ //you have a clear shot
+			this.gAngle = smoothRotate(this.gAngle, sAngle);
+			//take the shot if the gAngle is close to sAngle and the shotTimer is done
+			if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.1){
+				this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
+				this.shoot(walls);
+				return null;
+			}
+		}else{
+			this.rotateGun();
+			return null;
+		}
+		
+	}
+	
+	function bankedShot(walls, wallSegments, player){
+		sAngle = 0.0;
+		target = player.pos.clone();
+		bouncePoints = [];
+		validWallSegments = [];
+		
+		for(s : wallSegments){
+			
+			target = player.pos.clone();
+			// determine if wall is x or y and reflect appropriately
+			if(s[0][0] == s[1][0]){ //segment x's are the same, reflect the x value
+				
+				target[0] += 2*(s[0][0] - target[0] + 0.00001); //nudged to avoid the target falling on the same axis as this.pos
+				
+			}else if(s[0][1] == s[1][1]){ //segment y's are the same, reflect the y value
+				
+				target[1] += 2*(s[0][1] - target[1] + 0.00001);
+				
+			}
+			
+			if(segmentSegmentIntersection(s, [this.pos, target])){
+				validWallSegments.add(s);
+				bouncePoints.add(getSegmentsIntersection(s, [this.pos, target]));
+			}
+			
+		}
+		
+		for(i = 0; i < validWallSegments.length; i++){
+			s = validWallSegments[i];
+			b = [bouncePoints[i][0] + 0.00001, bouncePoints[i][1] + 0.00001];
+			
+			//check for a clear shot to the player, and make sure the gun won't be shooting into a wall or the shot won't reflect back into the tank shooting
+			if(this.clearShot(wallSegments, this.pos, b, s) && this.clearShot(wallSegments, b, player.pos, s) && !circleSegmentCollision(this.pos, this.r*1.5, s) && !circleSegmentCollision(this.pos, this.collisionR, [b, player.pos])){
+				sAngle = Math.arctan(b[1]-this.pos[1], b[0]-this.pos[0]);
+				this.gAngle = smoothRotate(this.gAngle, sAngle);
+				if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.1){
+					this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
+					this.shoot(walls);
+				}
+				return null;
+			}else{
+				
+			}
+		}
+		
+		//if all else fails, try a direct shot
+		this.directShot(walls, wallSegments, player);
+		return null;
+		
+	}
+	
+	function yesPlant(){
+		//do nothing rn
+	}
+	
+}
