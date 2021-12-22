@@ -16,7 +16,8 @@ To do:
 		- Distance: Like Clyde from PacMan; approach directly unless it's within a certain distance from the tank, then try to escape the range of the tank for a few seconds.
 		If it can't escape (because it would hit a wall), have it switch to direct again.
 	- For each function, take in an argument for max time between actions (maxShotTime, etc.) and pick a random time interval between maxTime and maxTime/2 for each action to count down before it runs again
-- Make the collision box for the enemy tanks a little bigger, it's not satisfying rn
+- Have the reflect shot gun rotate slower? Maybe make the mixAngle function take in a speed parameter of some kind
+- Make the tanks not shoot each other. Possibly have clear shot take all tanks into account, not just the player?
 - Maybe add a little effect if a bullet passes a certain velocity to show it's a fast one? Like the fire from Wii Tanks
 */
 
@@ -25,6 +26,7 @@ class BadTank : Tank{
 	field shotType;
 	field maxShotTime;
 	field shotTimeLeft;
+	field shotPos = null;
 	
 	field plantType;
 	field maxPlantTime;
@@ -138,14 +140,14 @@ class BadTank : Tank{
 	
 	function clearShot(wallSegments, sourcePos, targetPos, exclude){ //exclude is one passed segment to ignore
 		for(s : wallSegments){
-			if(s != exclude && segmentSegmentIntersection(s, [sourcePos, targetPos])){
+			if(s != exclude && segmentSegmentCollision(s, [sourcePos, targetPos])){
 				return false;
 			}
 		}
 		return true;
 	}
 	
-	function directShot(walls, wallSegments, player){ //do the shot timing!!!!!!!!!!!!!!!!!!!!!!!!
+	function directShot(walls, wallSegments, player){
 		
 		sAngle = Math.arctan(player.pos[1]-this.pos[1], player.pos[0]-this.pos[0]);
 		count = 0;
@@ -153,7 +155,7 @@ class BadTank : Tank{
 		if(this.clearShot(wallSegments, this.pos, player.pos, null)){ //you have a clear shot
 			this.gAngle = smoothRotate(this.gAngle, sAngle);
 			//take the shot if the gAngle is close to sAngle and the shotTimer is done
-			if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.1){
+			if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.01){
 				this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
 				this.shoot(walls);
 				return null;
@@ -166,53 +168,60 @@ class BadTank : Tank{
 	}
 	
 	function bankedShot(walls, wallSegments, player){
-		sAngle = 0.0;
-		target = player.pos.clone();
-		bouncePoints = [];
-		validWallSegments = [];
 		
-		for(s : wallSegments){
+		if(this.shotTimeLeft <= 0 && this.shotPos == null){
 			
+			sAngle = 0.0;
 			target = player.pos.clone();
-			// determine if wall is x or y and reflect appropriately
-			if(s[0][0] == s[1][0]){ //segment x's are the same, reflect the x value
-				
-				target[0] += 2*(s[0][0] - target[0] + 0.00001); //nudged to avoid the target falling on the same axis as this.pos
-				
-			}else if(s[0][1] == s[1][1]){ //segment y's are the same, reflect the y value
-				
-				target[1] += 2*(s[0][1] - target[1] + 0.00001);
-				
-			}
+			bouncePoints = [];
+			validWallSegments = [];
 			
-			if(segmentSegmentIntersection(s, [this.pos, target])){
-				validWallSegments.add(s);
-				bouncePoints.add(getSegmentsIntersection(s, [this.pos, target]));
-			}
-			
-		}
-		
-		for(i = 0; i < validWallSegments.length; i++){
-			s = validWallSegments[i];
-			b = [bouncePoints[i][0] + 0.00001, bouncePoints[i][1] + 0.00001];
-			
-			//check for a clear shot to the player, and make sure the gun won't be shooting into a wall or the shot won't reflect back into the tank shooting
-			if(this.clearShot(wallSegments, this.pos, b, s) && this.clearShot(wallSegments, b, player.pos, s) && !circleSegmentCollision(this.pos, this.r*1.5, s) && !circleSegmentCollision(this.pos, this.collisionR, [b, player.pos])){
-				sAngle = Math.arctan(b[1]-this.pos[1], b[0]-this.pos[0]);
-				this.gAngle = smoothRotate(this.gAngle, sAngle);
-				if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.1){
-					this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
-					this.shoot(walls);
+			for(s : wallSegments){
+				
+				target = player.pos.clone();
+				// determine if wall is x or y and reflect appropriately
+				if(s[0][0] == s[1][0]){ //segment x's are the same, reflect the x value
+					
+					target[0] += 2*(s[0][0] - target[0] + 0.00001); //nudged to avoid the target falling on the same axis as this.pos
+					
+				}else if(s[0][1] == s[1][1]){ //segment y's are the same, reflect the y value
+					
+					target[1] += 2*(s[0][1] - target[1] + 0.00001);
+					
 				}
-				return null;
-			}else{
 				
+				if(segmentSegmentCollision(s, [this.pos, target])){
+					validWallSegments.add(s);
+					bouncePoints.add(segmentSegmentIntersection(s, [this.pos, target]));
+				}
+				
+			}
+			
+			for(i = 0; i < validWallSegments.length; i++){
+				s = validWallSegments[i];
+				b = [bouncePoints[i][0] + 0.00001, bouncePoints[i][1] + 0.00001];
+				
+				//check for a clear shot to the player, and make sure the gun won't be shooting into a wall or the shot won't reflect back into the tank shooting
+				if(this.clearShot(wallSegments, this.pos, b, s) && this.clearShot(wallSegments, b, player.pos, s) && !circleSegmentCollision(this.pos, this.r*1.5, s) && !circleSegmentCollision(this.pos, this.collisionR, [b, player.pos])){
+					this.shotPos = b;
+				}
 			}
 		}
 		
-		//if all else fails, try a direct shot
-		this.directShot(walls, wallSegments, player);
-		return null;
+		if(this.shotPos != null){
+			
+			sAngle = Math.arctan(this.shotPos[1]-this.pos[1], this.shotPos[0]-this.pos[0]);
+			this.gAngle = smoothRotate(this.gAngle, sAngle);
+			if(Math.abs(this.gAngle - sAngle) < 0.01){
+				this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
+				this.shoot(walls);
+				this.shotPos = null;
+			}
+			
+		}else{
+			this.directShot(walls, wallSegments, player); //if all else fails, try a direct shot
+			return null;
+		}
 		
 	}
 	

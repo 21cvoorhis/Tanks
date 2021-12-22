@@ -39,7 +39,7 @@ class Bullet : Object{
 	
 	function collisionKill(tanks){
 		for(i = 0; i<tanks.length; i++){
-			if(pointQuadCollision(this.pos, tanks[i].bPoints) && tanks[i].alive){
+			if(circleQuadCollision(this.pos, this.r, tanks[i].bPoints) && tanks[i].alive){
 				this.alive = false;
 				return null;
 			}
@@ -65,7 +65,7 @@ class Bullet : Object{
 		if(this.bouncesLeft > 0){
 			
 			for(s : wallSegments){
-				if(segmentSegmentIntersection(s, [this.prevPos, this.pos])){
+				if(segmentSegmentCollision(s, [this.prevPos, this.pos])){
 					if(s[0][0] == s[1][0]){ //x are equal, x bounce
 						this.target[0] = -this.target[0];
 					}
