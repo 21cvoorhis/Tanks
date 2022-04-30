@@ -1,0 +1,72 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import TwoCansAlpha4;
+
+class ExtraLifeScene : AbstractScene{
+	
+	field levelNames;
+	field index;
+	field lives;
+	field deadTankTiles;
+	field deadWallTiles;
+	
+	field livesText;
+	field color = [0,160,161];
+	
+	field timeLeft;
+	
+	constructor(levelNames, index, lives, deadTankTiles, deadWallTiles) : base(){
+		
+		this.levelNames = levelNames;
+		this.index = index;
+		this.lives = ++lives;
+		this.deadTankTiles = deadTankTiles;
+		this.deadWallTiles = deadWallTiles;
+		
+		this.livesText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(36).setColor(this.color[0], this.color[1], this.color[2]).render("Extra Life!");
+		
+		levelString = levelNames[index];
+		newLevelString = "";
+		
+		this.timeLeft = 3.0;
+		
+	}
+	
+	function rainbow(){
+		for(i = 0; i<3; i++){
+			if(this.color[i]%2 == 0){
+				this.color[i] = this.color[i] + 6;
+				if(this.color[i] > 255){
+					this.color[i]--;
+				}
+			}else{
+				this.color[i] = this.color[i] - 6;
+				if(this.color[i] < 0){
+					this.color[i]++;
+				}
+			}
+		}
+	}
+	
+	function update(inputManager, events){
+	
+		if(this.timeLeft > 0){
+			this.timeLeft -= DT;
+			this.rainbow();
+			this.livesText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(36).setColor(this.color[0], this.color[1], this.color[2]).render("Extra Life!");
+		}else{
+			this.switchSceneFade(new IntroScene(this.levelNames, this.index, this.lives, this.deadTankTiles, this.deadWallTiles));
+		}
+		
+	}
+	
+	function render(){
+		
+		Graphics2D.Draw.fill(BR, BG, BB);
+		
+		this.livesText.draw((WIDTH/2) - (this.livesText.width/2), (HEIGHT/2) - (this.livesText.height/2));
+		
+	}
+	
+}

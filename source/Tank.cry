@@ -10,7 +10,10 @@ class Tank : Object{
 	//body vars
 	field bAngle; //angle the body is facing
 	field bPoints; //points that make the body's square
+	
 	field collisionR; //collision circle's radius for when a quadrelateral formula can't be used
+	field wallCollision = false;
+	field tankCollision = false;
 	
 	//gun vars
 	field gAngle; //angle the gun is facing
@@ -19,6 +22,9 @@ class Tank : Object{
 	field maxBullets;
 	field bulletSpeed;
 	field bulletBounces;
+	
+	//specter vars, i.e. bullet effects
+	field specters;
 	
 	//mine vars
 	field mines;
@@ -47,6 +53,8 @@ class Tank : Object{
 		this.bulletSpeed = bulletSpeed;
 		this.bulletBounces = bulletBounces;
 		
+		this.specters = [];
+		
 		this.mines = [];
 		this.maxMines = maxMines;
 		this.mineR = this.r/3.0;
@@ -54,10 +62,17 @@ class Tank : Object{
 		this.explosions = [];
 	}
 	
-	function updateTank(walls, tanks){
-	
-		this.bodyCollisionDie(tanks);
-		this.bodyCollisionWalls(walls);
+	function updateTank(walls, wallSegmentsDict, holesDict, tanks, tankSpecters, playerWon){
+		
+		this.tile = posToTile(this.pos);
+		if(!playerWon){
+			this.bodyCollisionDie(tanks);
+		}
+		this.bodyCollisionWalls(wallSegmentsDict, holesDict);
+		
+		if(this.vAngle != null){
+			this.bAngle = smoothRotate(this.bAngle, this.vAngle);
+		}
 		
 	}
 	
@@ -65,54 +80,108 @@ class Tank : Object{
 		if(this.bullets.length < this.maxBullets && !this.gCollision([1.3*this.r*cos(this.gAngle) + this.pos[0], 1.3*this.r*sin(this.gAngle) + this.pos[1]], walls)){
 			bx = this.pos[0] + (1.1*this.r*cos(this.gAngle));
 			by = this.pos[1] + (1.1*this.r*sin(this.gAngle));
-			this.bullets.add(new Bullet([bx, by], this.bulletR, [255, 255, 255], this.bulletSpeed, this.gAngle, this.bulletBounces));
+			this.bullets.add(new Bullet([bx, by], this.bulletR, [255, 255, 255, 255], this.bulletSpeed, this.gAngle, this.bulletBounces, this.specters));
 		}
 	}
 	
 	function plant(){
 		if(this.mines.length < this.maxMines){
-			this.mines.add(new Mine(this.pos.clone(), this.mineR, [255, 255, 0], 10));
+			this.mines.add(new Mine(this.pos.clone(), this.mineR, [255, 255, 0, 255], 10));
 		}
 	}
 	
-	function bodyCollisionWalls(walls){
+	/*
+	- Use the same iterative collision checking on the objects here that you use on the tanks
+		- Make a holeDict that just returns the 8 holes surronding the given tile, and the one on the given tile if applicible
+		- Use the circle collision resolution from the tank collisions, but only move the tank, and move it twice as far
+		- repeat that and the wall collisions until none are left
+	*/
+	
+	function bodyCollisionWalls(wallSegmentsDict, holesDict){
 		
-		pi = this.pos; //position initial
-		pb = this.prevPos; //position before
+		this.tile = posToTile(this.pos);
 		
-		for(i = 0; i<walls.length; i++){
-			if(circleRectCollision(pi, this.collisionR, walls[i])){
-				//if shifting pos[0] to prevPos[0] will not cause a collision, make that change
-				if(!circleRectCollision([pb[0], pi[1]], this.collisionR, walls[i])){
-					//this checks for a glitch (catching) that only happens with a down & left input against the seam of 2 walls horizontally next to each other
-					if((i<walls.length-1) && (walls[i].right == walls[i+1].left) && !circleRectCollision([pi[0], pb[1]], this.collisionR, walls[i])){
-						this.pos[1] = this.prevPos[1];
-					}else{
-						this.pos[0] = this.prevPos[0];
+		this.wallCollision = false;
+		
+		sList = [];
+		
+		collisions = 1;
+		while(collisions > 0){
+			collisions = 0;
+			try{
+				sList = wallSegmentsDict[tileToIndex(this.tile)];
+				
+				for(i = 0; i<sList.length; i++){
+					if(circleSegmentCollision(this.pos, this.collisionR, sList[i])){
+						this.wallCollision = true;
+						this.wallShift(sList[i]); //this is a function so it can return null to stop running
+						collisions++;
 					}
-				}else if(!circleRectCollision([pi[0], pb[1]], this.collisionR, walls[i])){
-					this.pos[1] = this.prevPos[1];
-				}else{
-					this.pos[0] = this.prevPos[0];
-					this.pos[1] = this.prevPos[1];
 				}
-			}
+			}catch(Core.KeyNotFoundException){}
+			
+			try{
+				hList = holesDict[tileToIndex(this.tile)];
+				
+				for(i = 0; i<hList.length; i++){
+					if(circleCircleCollision(this.pos, this.collisionR, hList[i].pos, hList[i].r)){ //holeShift
+						h = hList[i];
+						a2b = pointDistance(this.pos[0], this.pos[1], h.pos[0], h.pos[1]);
+						overlap = (this.collisionR + h.r) - a2b;
+						if(Math.abs(overlap) > 0.001){
+							this.prevPos = this.pos.clone();
+							normalizedX = (h.pos[0] - this.pos[0])/a2b;
+							normalizedY = (h.pos[1] - this.pos[1])/a2b;
+							this.pos[0] -= normalizedX*overlap*2;
+							this.pos[1] -= normalizedY*overlap*2;
+							this.wallCollision = true;
+							collisions++;
+						}
+					}
+				}
+			}catch(Core.KeyNotFoundException){}
 		}
+		
 	}
+	
+	function wallShift(s){
+		
+		if(s[0][0] == s[1][0]){
+			xy = 0;
+		}else{
+			xy = 1;
+		}
+		
+		difference = s[0][xy] - this.pos[xy];
+		if(Math.abs(difference) < 8){
+			return null;
+		}
+		
+		shift = this.collisionR - Math.abs(difference);
+		
+		if(difference > 0){
+			this.pos[xy] -= shift + 0.001;
+		}else{
+			this.pos[xy] += shift + 0.001;
+		}
+		
+	}
+	
+	
 	
 	//most objects create an explosion when removed from the list, the tank does it here because they aren't removed from the list, so their elements can still be updated
 	function bodyCollisionDie(tanks){
 		for(i = 0; i<tanks.length; i++){
 			for(j = 0; j<tanks[i].bullets.length; j++){
 				if(circleQuadCollision(tanks[i].bullets[j].pos, tanks[i].bullets[j].r, this.bPoints)){
-					this.explosions.add(new Explosion(this.pos.clone(), this.r*1.2, [255, 0, 0], [255, 127, 0]));
+					this.explosions.add(new Explosion(this.pos.clone(), this.r*1.2, [255, 0, 0, 255], [255, 127, 0, 255]));
 					this.alive = false;
 					return null;
 				}
 			}
 			for(j = 0; j<tanks[i].explosions.length; j++){
 				if(circleCircleCollision(this.pos, this.collisionR, tanks[i].explosions[j].pos, tanks[i].explosions[j].r) && tanks[i].explosions[j].timeLeft >= tanks[i].explosions[j].killTime){
-					this.explosions.add(new Explosion(this.pos.clone(), this.r*1.2, [255, 0, 0], [255, 127, 0]));
+					this.explosions.add(new Explosion(this.pos.clone(), this.r*1.2, [255, 0, 0, 255], [255, 127, 0, 255]));
 					this.alive = false;
 					return null;
 				}
@@ -129,16 +198,11 @@ class Tank : Object{
 		return false;
 	}
 	
-	function drawTank(){ //also updates all sets of body points
+	function drawTank(player){ //also updates all sets of body points
 		
-		targetAngle = this.vAngle;
 		tempAngle = 0.0;
 		outlinePoints = [[],[],[],[]];
-		gPoints = [[],[],[],[]];
-		
-		if(this.motion){
-			this.bAngle = smoothRotate(this.bAngle, targetAngle);
-		}	
+		gPoints = [[],[],[],[]];	
 			
 		for(i = 0; i < 4; i++){
 			tempAngle = ((Math.PI*2)/4) * i + (Math.PI/4) + this.bAngle;
@@ -155,13 +219,38 @@ class Tank : Object{
 		gPoints[3] = [(1.25*this.r*cos(tempAngle)) + gPoints[0][0], (1.25*this.r*sin(tempAngle)) + gPoints[0][1]];
 		
 		//body
-		Graphics2D.Draw.quad(outlinePoints[0][0], outlinePoints[0][1], outlinePoints[1][0], outlinePoints[1][1], outlinePoints[2][0], outlinePoints[2][1], outlinePoints[3][0], outlinePoints[3][1], 0, 0, 0);
-		Graphics2D.Draw.quad(this.bPoints[0][0], this.bPoints[0][1], this.bPoints[1][0], this.bPoints[1][1], this.bPoints[2][0], this.bPoints[2][1], this.bPoints[3][0], this.bPoints[3][1], this.color[0], this.color[1], this.color[2]);
+		Graphics2D.Draw.quad(
+			outlinePoints[0][0], outlinePoints[0][1], 
+			outlinePoints[1][0], outlinePoints[1][1], 
+			outlinePoints[2][0], outlinePoints[2][1], 
+			outlinePoints[3][0], outlinePoints[3][1], 
+			0, 0, 0, this.color[3]);
+		Graphics2D.Draw.quad(
+			this.bPoints[0][0], this.bPoints[0][1], 
+			this.bPoints[1][0], this.bPoints[1][1], 
+			this.bPoints[2][0], this.bPoints[2][1], 
+			this.bPoints[3][0], this.bPoints[3][1], 
+			this.color[0], this.color[1], this.color[2], this.color[3]);
 		//gun
-		Graphics2D.Draw.quad(gPoints[0][0], gPoints[0][1], gPoints[1][0], gPoints[1][1], gPoints[2][0], gPoints[2][1], gPoints[3][0], gPoints[3][1], 0, 0, 0);
+		Graphics2D.Draw.quad(
+			gPoints[0][0], gPoints[0][1], 
+			gPoints[1][0], gPoints[1][1], 
+			gPoints[2][0], gPoints[2][1], 
+			gPoints[3][0], gPoints[3][1], 
+			0, 0, 0, this.color[3]);
 		//circle turret
-		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.6), this.pos[1]-(this.r*0.6), this.r*1.2, this.r*1.2, 0, 0, 0);
-		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.5), this.pos[1]-(this.r*0.5), this.r, this.r, this.color[0], this.color[1], this.color[2]);
+		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.6), this.pos[1]-(this.r*0.6), this.r*1.2, this.r*1.2, 0, 0, 0, this.color[3]);
+		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.5), this.pos[1]-(this.r*0.5), this.r, this.r, this.color[0], this.color[1], this.color[2], this.color[3]);
+		
+		//let the tank fade in at the start of the round
+		timeCheck = 0;
+		if(!player){
+			timeCheck = 2;
+		}
+		
+		if(this.time > timeCheck && this.time < 4.0){
+			this.color[3] = fade(1.2, this.color[3], true);
+		}
 		
 	}
 	

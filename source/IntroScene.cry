@@ -1,0 +1,100 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import TwoCansAlpha4;
+
+class IntroScene : AbstractScene{
+	
+	field levelNames;
+	field index;
+	field lives;
+	field deadTankTiles;
+	field deadWallTiles;
+	
+	field indexText;
+	field levelNameText;
+	field livesText;
+	field alpha;
+	
+	field timeLeft;
+	
+	constructor(levelNames, index, lives, deadTankTiles, deadWallTiles) : base(){
+		
+		this.levelNames = levelNames;
+		this.index = index;
+		this.lives = lives;
+		this.deadTankTiles = deadTankTiles;
+		this.deadWallTiles = deadWallTiles;
+		
+		this.indexText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render("Level " + (index+1));
+		
+		levelString = levelNames[index];
+		newLevelString = "";
+		
+		if(this.isDigit(levelString[0])){
+			numberDone = false;
+			for(i = 0; i<levelString.length; i++){
+				if(numberDone){
+					newLevelString+=levelString[i];
+				}
+				if(levelString[i] == ' ' && !numberDone){
+					numberDone = !numberDone;
+				}
+			}
+		}else{
+			newLevelString = levelString;
+		}
+		
+		this.levelNameText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render("\"" + newLevelString + "\"");
+		
+		if(lives == 1){
+			this.livesText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render(lives + " life");
+		}else{
+			this.livesText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render(lives + " lives");
+		}
+		this.alpha = 255;
+		
+		this.timeLeft = 2.0;
+		
+	}
+	
+	function isDigit(d){
+		return d == '0' 
+		|| d == '1' 
+		|| d == '2' 
+		|| d == '3' 
+		|| d == '4' 
+		|| d == '5' 
+		|| d == '6' 
+		|| d == '7' 
+		|| d == '8' 
+		|| d == '9';
+	}
+
+	
+	function update(inputManager, events){
+		
+		if(this.timeLeft > 0){
+			this.timeLeft -= DT;
+			
+			if(this.timeLeft < 1.0){
+				this.alpha -= (255/60.0);
+			}
+			
+		}else{
+			this.switchScene(new PlayScene(this.levelNames, this.index, this.lives, this.deadTankTiles, this.deadWallTiles));
+		}
+		
+	}
+	
+	function render(){
+		
+		Graphics2D.Draw.fill(BR, BG, BB);
+		
+		this.indexText.drawWithAlpha((WIDTH/2) - (this.indexText.width/2), (HEIGHT/2) - 48 - (this.indexText.height/2), Math.floor(this.alpha));
+		this.levelNameText.drawWithAlpha((WIDTH/2) - (this.levelNameText.width/2), (HEIGHT/2) - (this.levelNameText.height/2), Math.floor(this.alpha));
+		this.livesText.drawWithAlpha((WIDTH/2) - (this.livesText.width/2), (HEIGHT/2) + 48 - (this.livesText.height/2), Math.floor(this.alpha));
+		
+	}
+	
+}

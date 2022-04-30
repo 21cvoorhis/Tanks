@@ -8,12 +8,20 @@ To do:
 - Shooting
 	- Lead: Aim at where the player will be (lead the shot). Calculate this with an expanding circle of aim (based on time) and the estimated position of the tank keeping it's current velocity (also based on time)
 - Movement
-	- Distance: Like Clyde from PacMan; approach directly unless it's within a certain distance from the tank, then try to escape the range of the tank for a few seconds.
-		- If it can't escape (because it would hit a wall), have it switch to direct again.
-- Maybe add a little effect if a bullet passes a certain velocity to show it's a fast one? Like the fire from Wii Tanks
+	- Smart: Same as distance, but if you're near a mine, swap back to normal movement
 */
 
 class BadTank : Tank{
+	
+	field initialTile;
+	
+	field collisionCount = 0;
+	
+	field fleeDistance = 48; //only modify this in the constructor this if a single number is too broad to work
+	field moveType;
+	field moveTimeLeft = 0.0;
+	field normalPathing = false;
+	field path = [];
 	
 	field shotType;
 	field maxShotTime;
@@ -24,46 +32,53 @@ class BadTank : Tank{
 	field maxPlantTime;
 	field plantTimeLeft;
 	
-	field fleeDistance = 48; //only modify this in the constructor this if a single number is too broad to work
-	field moveType;
-	field moveTimeLeft = 0.0;
-	field path = [];
-	
 	field rotateTimeLeft = 0.0;
-	field rotateDirection = 0; //0 = none, 1 = clockwise, 2 = counterclockwise
+	field rotateDirection; //0 = none, 1 = clockwise, 2 = counterclockwise
 	field bodyW = Math.PI*DT*1.5; //angular velocities for linearly rotation
 	field gunW = Math.PI*DT/2.0;
 	
-	constructor(pos, radius, color, vel, shotType, maxShotTime, maxBullets, bulletSpeed, bulletBounces, plantType, maxPlantTime, maxMines, mineTime, moveType) : 
+	constructor(pos, radius, color, moveType, vel, shotType, maxShotTime, maxBullets, bulletSpeed, bulletBounces, plantType, maxPlantTime, maxMines, mineTime) : 
 	base(pos, radius, color, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime){
+		
+		this.initialTile = this.tile.clone();
+		
+		this.moveType = moveType;
 		
 		this.shotType = shotType;
 		this.maxShotTime = maxShotTime;
-		this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5);
+		this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5)/2.0;
+		this.shotTimeLeft = maxShotTime/2.0;
 		
 		this.plantType = plantType;
 		this.maxPlantTime = maxPlantTime;
 		this.plantTimeLeft = mix(this.maxPlantTime, this.maxPlantTime * Random.randomFloat(), 0.5);
 		
-		this.moveType = moveType;
-		
 		this.rotateTimeLeft = mix(5, 5*Random.randomFloat(), 0.75);
+		this.rotateDirection = Random.randomInt(0, 3);
 	}
 	
 	//this should be updated to reflect the shooting behavior
-	function updateBadTank(walls, wallSegments, wallSegmentsDict, tanks, nodes){
+	function updateBadTank(walls, wallSegments, wallSegmentsDict, holesDict, tanks, nodes){
 		
 		player = tanks[tanks.length-1];
 		
 		if(this.alive){
+			
+			if(this.tankCollision){
+				this.collisionCount++;
+			}else{
+				this.collisionCount = 0;
+			}
 			
 			this.shotTimeLeft -= DT;
 			this.plantTimeLeft -= DT;
 			this.moveTimeLeft -= DT;
 			this.rotateTimeLeft -= DT;
 			
-			this.bodyCollisionDie(tanks);
-			this.bodyCollisionWalls(wallSegmentsDict);
+			if(player.alive){
+				this.bodyCollisionDie(tanks);
+			}
+			this.bodyCollisionWalls(wallSegmentsDict, holesDict);
 			
 			if(this.vAngle != null){
 				this.bAngle = smoothRotate(this.bAngle, this.vAngle);
@@ -77,7 +92,13 @@ class BadTank : Tank{
 						this.directMove(player, nodes);
 						break;
 					case MoveType.RANDOM:
-						this.randomMove(nodes);
+						this.randomMove(tanks, nodes);
+						break;
+					case MoveType.DISTANCE:
+						this.distanceMove(wallSegments, tanks, nodes);
+						break;
+					case MoveType.NORMAL:
+						this.normalMove(tanks, nodes);
 						break;
 				}
 				
@@ -140,7 +161,7 @@ class BadTank : Tank{
 	
 	function directMove(target, nodes){
 		
-		if( (!listsEqual(this.tile, target.tile)) && ((this.path.length == 0) || !listsEqual(target.tile, this.path[this.path.length-1].tile)) ){
+		if((!listsEqual(this.tile, target.tile)) && ((this.path.length == 0) || !listsEqual(target.tile, this.path[this.path.length-1].tile))){
 			this.path = this.findPath(findNode(this.tile, nodes), findNode(target.tile, nodes), nodes);
 		}
 		
@@ -159,15 +180,19 @@ class BadTank : Tank{
 			}
 		}
 		
+		if(this.moveTimeLeft <= 0){
+			this.moveTimeLeft = mix(5, 5*Random.randomFloat(), 0.5);
+		}
+		
 	}
 	
-	function randomMove(nodes){
+	function randomMove(tanks, nodes){
 		
-		target = nodes[nodes.keys().choice()];
-		
-		if((this.moveTimeLeft <= 0) || (this.path.length == 0)){
+		if((this.moveTimeLeft <= 0) || (this.path.length == 0) || this.collisionCount >= 5){
+			target = nodes[nodes.keys().choice()];
 			this.path = this.findPath(findNode(this.tile, nodes), findNode(target.tile, nodes), nodes);
 			this.moveTimeLeft = mix(5, 5*Random.randomFloat(), 0.5);
+			this.collisionCount = 0;
 		}
 		
 		if(this.path.length == 0){
@@ -183,6 +208,50 @@ class BadTank : Tank{
 			}catch(Core.IndexOutOfRangeException){
 				this.vAngle = null;
 			}
+		}
+		
+	}
+	
+	function distanceMove(wallSegments, tanks, nodes){
+		
+		player = tanks[tanks.length-1];
+		
+		shot = this.clearShot(wallSegments, tanks, this.pos, player.pos, null);
+		
+		if(this.moveTimeLeft <= 0){
+			if(shot){
+				this.normalPathing = false;
+			}else{
+				this.normalPathing = true;
+			}
+			this.moveTimeLeft = mix(3, 3*Random.randomFloat(), 0.5);
+		}
+		
+		if(this.normalPathing){
+			this.directMove(player, nodes);
+		}else{
+			this.vAngle = null;
+		}
+		
+	}
+	
+	function normalMove(tanks, nodes){
+		
+		player = tanks[tanks.length-1];
+		rand = Random.randomFloat();
+		
+		if(this.moveTimeLeft <= 0){
+			if(!this.normalPathing || rand <= 0.6){
+				this.normalPathing = true;
+			}else{
+				this.normalPathing = false;
+			}
+		}
+		
+		if(this.normalPathing){
+			this.directMove(player, nodes);
+		}else{
+			this.randomMove(tanks, nodes);
 		}
 		
 	}
@@ -245,15 +314,6 @@ class BadTank : Tank{
 			current = cameFrom[current];
 		}
 		
-		//removable!!!!!!!!!!!!!!!!!!!!!
-		for(k : nodes.keys()){
-			n = nodes[k];
-			n.color = [0, 0, 255];
-		}
-		for(n : path){
-			n.color[0] = 255;
-		}
-		
 		path.reverse();
 		return path;
 		
@@ -264,9 +324,9 @@ class BadTank : Tank{
 		if(this.vAngle == null){ //tank is stationary, rotate quasi randomly
 		
 			if(this.rotateDirection == 1){
-				this.gAngle = linearRotate(this.gAngle, Math.PI*DT/-3.0);
+				this.gAngle = linearRotate(this.gAngle, -1.0 * this.gunW);
 			}else if(this.rotateDirection == 2){
-				this.gAngle = linearRotate(this.gAngle, Math.PI*DT/3.0);
+				this.gAngle = linearRotate(this.gAngle, this.gunW);
 			}
 			
 			if(this.rotateTimeLeft <= 0){
@@ -280,7 +340,7 @@ class BadTank : Tank{
 			
 		}else{ //tank isn't stationary, follow the tank's movement
 			
-			this.gAngle = smoothRotate(this.gAngle, this.vAngle);
+			this.gAngle = this.turnGun(this.gAngle, this.vAngle, this.gunW*2.0);
 			
 		}
 		
@@ -288,10 +348,12 @@ class BadTank : Tank{
 	
 	function turnGun(current, target, w){
 		
+		//no target
 		if(current == null){
 			return target;
 		}
 		
+		//adjust if you're around the other end of the circle
 		if(Math.abs(current-target) > Math.PI){
 			if(target > 0){
 				target = target - (2*Math.PI);
@@ -300,7 +362,10 @@ class BadTank : Tank{
 			}
 		}
 		
-		if(Math.abs(current - target) < w){
+		//drag the gun along if you're turning a lot, otherwise spin normally
+		if(this.moveType != MoveType.NONE && Math.abs(current-target) > Math.PI/3.0){
+			return smoothRotate(current, target);
+		}else if(Math.abs(current - target) < w){
 			return target;
 		}else if(current > target){
 			return linearRotate(current, w*-1.0);
@@ -332,7 +397,13 @@ class BadTank : Tank{
 		count = 0;
 		
 		if(this.clearShot(wallSegments, tanks, this.pos, player.pos, null)){ //you have a clear shot
-			this.gAngle = this.turnGun(this.gAngle, sAngle, this.gunW);
+			
+			if(this.moveType == MoveType.NONE){
+				this.gAngle = this.turnGun(this.gAngle, sAngle, this.gunW);
+			}else{
+				this.gAngle = this.turnGun(this.gAngle, sAngle, this.gunW*2.0);
+			}
+			
 			//take the shot if the gAngle is close to sAngle and the shotTimer is done
 			if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.01){
 				this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
@@ -385,6 +456,8 @@ class BadTank : Tank{
 					this.shotPos = b;
 				}
 			}
+			
+			this.shotTimeLeft = mix(1.0, 1.0 * Random.randomFloat(), 0.8); //without this it runs every frame to find a target
 		}
 		
 		if(this.shotPos != null){

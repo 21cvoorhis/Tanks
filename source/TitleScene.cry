@@ -1,0 +1,136 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import TwoCansAlpha4;
+
+/*
+To Do
+- Make a completion you win screen/room
+- Make a credits screen
+	- hydrogen777: For creating so many games in Crayon that I could reference the code of on GitHub
+	- Zelda I: For the idea of how to texture the border walls
+- Add a menu for which campaign you want and possibly what level
+	- Use UserData to save how far a player is for a given campaign (save which levels they have completed and in which campaign)
+- Change the menu icons to actually look nice
+	- Options should not be words, should be icons
+	- Have them go left and right, not up and down
+	- Maybe make the level select non-verbal as well? Pictures only
+		- Lives -> Picture of tank, X, number
+		- Title of the Level and level number bigger, and up top, like NSMB Wii level intros
+- Level editor? Or at least a way to play a custom level formatted correctly
+	- If you go the text paste route have the screen explain how it works, and only accept it if it's the exact right length of text
+- Passwords Screen? This is where all the secrets would go
+	- Post some of the passwords on the ending screen of your original campaign, maybe some on the Wii remake too
+	- Create a "Passwords" class that generates an object at the start and passes that to PlayScene
+- Speedrun mode? After a player beats a campaign once put the time for that campaign under in on the menu, and display a timer in the top right for each level
+	- Timer should only run for in-game time, i.e. when the player tanks is in danger and ifhgting others (not when the scene is opening or transitioning)
+*/
+
+/*
+- Notable Levels:
+	- 3: Designed to jump in difficulty to demonstrate respawn mechanics at first, and that tanks won't respawn when you do. Also, push the player a little
+	- 11: The design took a while, but there should always be enough time to see the enemy shoot and lay a mine before killing it, displaying all of it's abilities
+*/
+
+enum Route { PLAY, TUTORIAL, CREDITS }
+
+class Option{ //thanks Hydrogen777 :)
+	
+	field index;
+	field text;
+	field pos;
+	field route;
+	
+	constructor(index, text, route){
+		this.index = index;
+		this.text = FontResource.fromSystem("Times New Roman").getRenderer().setSize(16).setColor(0, 0, 0).render(text);
+		this.pos =
+			[WIDTH/2 - this.text.width/2, 
+			HEIGHT/2 + 40*index - this.text.height/2];
+		this.route = route;
+	}
+	
+	function selected(inputManager){
+		if(inputManager.didMouseClickHere(this.pos[0], this.pos[1], this.text.width, this.text.height)) {
+			return true;
+		}
+		if(inputManager.isKeyPressed(KeyboardKey.SPACE) || inputManager.isKeyPressed(KeyboardKey.ENTER)) {
+			if(TitleScene.selection == this.index) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+class TitleScene : AbstractScene{
+	
+	field levelNames = ["!test", 
+		"1 Homage", "2 1v1", "3 Traction", "4 Quickscope", "5 Infiltration", 
+		"6 Mirror Match", "7 Gridlocked", "8 Wrecking Crew", "9 Between a Rock", "10 Mine(d) The Gap", 
+		"11 Deja Vu", "12 Pipeline", "13 Infantry", 
+		"17 Camel", "18 Bottleneck"];
+	field lives = 3;
+	
+	field options;
+	static field selection = 0;
+	
+	field titleText;
+	
+	constructor() : base(){
+		
+		this.titleText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(20).setColor(0, 0, 0).render("Tanks!");
+		
+		this.options = [];
+		this.options.add(new Option(0, "Play!", Route.PLAY));
+		this.options.add(new Option(1, "How To Play", Route.TUTORIAL));
+		this.options.add(new Option(2, "Credits", Route.CREDITS));
+		
+	}
+	
+	function update(inputManager, events){
+		
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.UP) || inputManager.isKeyPressedThisFrame(KeyboardKey.W)){
+			TitleScene.selection = (TitleScene.selection - 1) % this.options.length;
+		}
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.DOWN) || inputManager.isKeyPressedThisFrame(KeyboardKey.S)){
+			TitleScene.selection = (TitleScene.selection + 1) % this.options.length;
+		}
+		
+		for(i = 0; i < this.options.length; ++i){
+			if(this.options[i].selected(inputManager)){
+				TitleScene.selection = i;
+				switch(this.options[i].route){
+					case Route.PLAY:
+						this.switchSceneFade(new IntroScene(this.levelNames, 0, this.lives, [], []));
+						break;
+					case Route.TUTORIAL:
+						this.switchSceneFade(new PlayScene(["!tutorial"], 0, 0, [], []));
+						break;
+					case Route.CREDITS:
+						print("Made by Colin ;)");
+						break;
+				}
+				return;
+			}
+		}
+		
+	}
+	
+	function render(){
+		
+		Graphics2D.Draw.fill(BR, BG, BB);
+		
+		this.titleText.draw((WIDTH/2) - (this.titleText.width/2), (HEIGHT/4) - (this.titleText.height/2));
+		
+		for(i = 0; i < this.options.length; ++i){
+			option = this.options[i];
+			if(i == TitleScene.selection){
+				Graphics2D.Draw.rectangle(option.pos[0], option.pos[1], option.text.width, option.text.height, BR+35, BG+35, BB+35);
+			}
+			option.text.draw(option.pos[0], option.pos[1]);
+		}
+		
+	}
+	
+}
