@@ -34,12 +34,12 @@ class Mine : Object{
 		
 	}
 	
-	function flashColors(color1, color2, flashTime){
+	function flashColors(color, flashColor, flashTime){
 		if(this.flashTimer >= flashTime){
-			if(this.color == color1){
-				this.color = color2;
+			if(this.color == color){
+				this.color = flashColor;
 			}else{
-				this.color = color1;
+				this.color = color;
 			}
 			this.flashTimer = 0.0;
 		}

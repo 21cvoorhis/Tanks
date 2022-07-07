@@ -11,7 +11,8 @@ To Do
 	- Zelda I: For the idea of how to texture the border walls
 - Add a menu for which campaign you want and possibly what level
 	- Use UserData to save how far a player is for a given campaign (save which levels they have completed and in which campaign)
-- Change the menu icons to actually look nice
+- Change the menu to actually look nice
+	- Background should have largish diagonal lines moving slowly, that are slightly darker grey
 	- Options should not be words, should be icons
 	- Have them go left and right, not up and down
 	- Maybe make the level select non-verbal as well? Pictures only
@@ -24,6 +25,9 @@ To Do
 	- Create a "Passwords" class that generates an object at the start and passes that to PlayScene
 - Speedrun mode? After a player beats a campaign once put the time for that campaign under in on the menu, and display a timer in the top right for each level
 	- Timer should only run for in-game time, i.e. when the player tanks is in danger and ifhgting others (not when the scene is opening or transitioning)
+- Tank wiki?
+	- Little display for each tank and their abilities
+	- Z: Destroyer (tab down) Fast shot with a faster reload
 */
 
 /*
@@ -65,11 +69,12 @@ class Option{ //thanks Hydrogen777 :)
 
 class TitleScene : AbstractScene{
 	
+	//cut dodgeball and include the levels you want to!!!
 	field levelNames = ["!test", 
 		"1 Homage", "2 1v1", "3 Traction", "4 Quickscope", "5 Infiltration", 
-		"6 Mirror Match", "7 Gridlocked", "8 Wrecking Crew", "9 Between a Rock", "10 Mine(d) The Gap", 
-		"11 Deja Vu", "12 Pipeline", "13 Infantry", 
-		"17 Camel", "18 Bottleneck"];
+		"6 Mirror Match", "7 Gridlocked", "8 Wrecking Crew", "9 Between a Rock", "10 Mind The Gap", 
+		"11 Deja Vu", "12 Pipeline", "13 Infantry", "14 Dodgeball", "15",   
+		"17 Fish In A Barrel", "18", "19 Camel"];
 	field lives = 3;
 	
 	field options;
@@ -79,7 +84,7 @@ class TitleScene : AbstractScene{
 	
 	constructor() : base(){
 		
-		this.titleText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(20).setColor(0, 0, 0).render("Tanks!");
+		this.titleText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(32).setColor(0, 0, 0).render("Tanks!");
 		
 		this.options = [];
 		this.options.add(new Option(0, "Play!", Route.PLAY));

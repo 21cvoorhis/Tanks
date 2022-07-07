@@ -88,6 +88,7 @@ class Bullet : Object{
 			
 		}else{
 			this.alive = false;
+			this.explode = true;
 			return null;
 		}
 		
@@ -147,7 +148,7 @@ class Bullet : Object{
 
 class BulletSpecter : Object{
 	
-	field color2;
+	field mixColor;
 	field buttPoints;
 	
 	constructor(pos, radius, color, vAngle) : base(pos, radius, color){
@@ -155,7 +156,7 @@ class BulletSpecter : Object{
 		this.vAngle = vAngle;
 		
 		this.timeLeft = 1.0;
-		this.color2 = [BR, BG, BB, 255];
+		this.mixColor = [BR, BG, BB, 255];
 		
 		this.buttPoints = [[],[],[],[]];
 		tempAngle = this.vAngle - (Math.PI/2);
@@ -173,7 +174,7 @@ class BulletSpecter : Object{
 		
 		if(this.timeLeft > 0){
 			this.timeLeft -= DT;
-			this.color = mixColor(this.color, this.color2, 0.25);
+			this.color = mixColor(this.color, this.mixColor, 0.25);
 			
 			for(i = 0; i<tanks.length; i++){
 				for(j = 0; j<tanks[i].explosions.length; j++){

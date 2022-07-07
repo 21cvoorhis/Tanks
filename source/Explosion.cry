@@ -5,15 +5,15 @@ import TwoCansAlpha4;
 
 class Explosion : Object{
 	
-	field color2;
+	field mixColor;
 	field alpha;
 	field maxR;
 	field maxTime;
 	field killTime;
 	
-	constructor(pos, radius, color, color2) : base(pos, radius, color){
+	constructor(pos, radius, color, mixColor) : base(pos, radius, color){
 		
-		this.color2 = color2;
+		this.mixColor = mixColor;
 		this.alpha = 255;
 		
 		this.maxR = radius;
@@ -42,7 +42,7 @@ class Explosion : Object{
 			
 			//adjust colors
 			if(this.timeLeft > (this.maxTime*2)/3){
-				this.color = mixColor(this.color, this.color2, 0.1);
+				this.color = mixColor(this.color, this.mixColor, 0.1);
 			}else{
 				this.color[3] = mix(this.color[3], 0, 0.15);
 			}

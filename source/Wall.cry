@@ -122,14 +122,14 @@ class WeakWall : Wall{
 				explosion = tanks[i].explosions[j];
 				if(circleRectCollision(explosion.pos, explosion.r, this.sides) && explosion.timeLeft >= explosion.killTime && explosion.r > 15){
 					this.alive = false;
-					this.makeSpecters(explosion, wallSpecters);
+					this.makeSpecter(explosion, wallSpecters);
 					return null;
 				}
 			}
 		}
 	}
 	
-	function makeSpecters(explosion, wallSpecters){
+	function makeSpecter(explosion, wallSpecters){
 		
 		dx = this.pos[0] - explosion.pos[0];
 		dy = this.pos[1] - explosion.pos[1];
@@ -169,11 +169,9 @@ class WallSpecter{
 	field top;
 	
 	field color;
-	field baseColor;
-	field color2;
 	
-	field timeLeft;
-	field alive;
+	field timeLeft = 0.5;
+	field alive = true;
 	
 	constructor(pos, vel, vAngle, w, h, left, top, color){
 		
@@ -189,11 +187,6 @@ class WallSpecter{
 		this.vAngle = vAngle;
 		
 		this.color = color;
-		this.color2 = [BR, BG, BB, 255];
-		this.baseColor = [0, 0, 0, 255];
-		
-		this.timeLeft = 0.75;
-		this.alive = true;
 		
 	}
 	
@@ -203,12 +196,10 @@ class WallSpecter{
 		
 		if(this.timeLeft > 0){
 			
-			this.timeLeft -= DT;
-			this.color = mixColor(this.color, this.color2, 0.25);
-			this.baseColor = mixColor(this.baseColor, this.color2, 0.25);
+			this.color[3] = fade(0.5, this.color[3], false);
 			
 			if(this.vel > 15){
-				this.vel -= 12;
+				this.vel -= 8;
 			}
 			
 			if(this.vel < 15){
@@ -229,7 +220,7 @@ class WallSpecter{
 	
 	function drawSpecterInside(){
 		
-		Graphics2D.Draw.rectangle(this.left-2, this.top-2, this.w+4, this.h+4, this.baseColor[0], this.baseColor[1], this.baseColor[2], this.baseColor[3]);
+		Graphics2D.Draw.rectangle(this.left-2, this.top-2, this.w+4, this.h+4, 0, 0, 0, this.color[3]);
 		
 	}
 	

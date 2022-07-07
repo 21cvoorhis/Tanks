@@ -58,7 +58,7 @@ class BadTank : Tank{
 	}
 	
 	//this should be updated to reflect the shooting behavior
-	function updateBadTank(walls, wallSegments, wallSegmentsDict, holesDict, tanks, nodes){
+	function updateBadTank(walls, wallSegments, wallSegmentsDict, holesDict, tanks, tankSpecters, nodes){
 		
 		player = tanks[tanks.length-1];
 		
@@ -76,7 +76,7 @@ class BadTank : Tank{
 			this.rotateTimeLeft -= DT;
 			
 			if(player.alive){
-				this.bodyCollisionDie(tanks);
+				this.bodyCollisionDie(tanks, tankSpecters);
 			}
 			this.bodyCollisionWalls(wallSegmentsDict, holesDict);
 			

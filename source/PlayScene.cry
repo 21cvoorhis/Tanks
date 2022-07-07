@@ -7,7 +7,8 @@ import TwoCansAlpha4;
 
 /*
 To-do:
-- Make tanks fade out when they're killed? 
+- Make tanks fade out when they're killed?
+	- If it's from a bullet, shoot off as described below, if its an explosion, do as the walls do?
 	- Make the gun fly off the direction it's facing
 		- Make it spin a little too
 	- Make the circle turret part fly off in the opposite direction
@@ -523,7 +524,6 @@ function fade(fadeTime, alpha, fadeIn){
 		if(alpha <= 0){
 			return alpha;
 		}else{
-			temp = alpha - (255.0*DT/fadeTime);
 			return alpha - (255.0*DT/fadeTime);
 		}
 	}
@@ -652,10 +652,10 @@ class PlayScene : AbstractScene {
 					ShotType.DIRECT, MAX_SHOT_TIME, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.YES, MAX_PLANT_TIME*1.5, MAX_MINES, MINE_TIME));
 					break;
-				case 'Z': //moving tank with the player's attacks
+				case 'Z': //moving tank with a fast shot and a faster reload
 					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [191, 63, 63, 0], 
-					MoveType.DISTANCE, VEL*0.8, 
-					ShotType.BANKED, MAX_SHOT_TIME-1, MAX_BULLETS-2, FAST_BULLET_SPEED, BULLET_BOUNCES, 
+					MoveType.DIRECT, VEL*0.8, 
+					ShotType.DIRECT, MAX_SHOT_TIME-2.5, MAX_BULLETS-2, FAST_BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
 				case 'T': //test case, usable for target practice
@@ -1042,6 +1042,14 @@ class PlayScene : AbstractScene {
 	
 	function update(inputManager, events) {
 		
+		//check for pausing
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.P)){
+			this.pause = !this.pause;
+		}
+		if(this.pause){
+			return;
+		}
+		
 		this.updateWalls();
 		
 		holeKeys = this.holes.keys();
@@ -1096,14 +1104,6 @@ class PlayScene : AbstractScene {
 		}
 		
 		this.mousePos = inputManager.getMousePosition();
-		
-		//check for pausing
-		if(inputManager.isKeyPressedThisFrame(KeyboardKey.P)){
-			this.pause = !this.pause;
-		}
-		if(this.pause){
-			return;
-		}
 		
 		//player movement
 		this.player.target[0] = 0;
@@ -1194,7 +1194,7 @@ class PlayScene : AbstractScene {
 		}
 		for(i = 0; i<this.tanks.length-1; i++){
 			if(this.tanks[i].alive){
-				this.tanks[i].updateBadTank(this.walls, this.wallSegments, this.wallSegmentsDict, this.holesDict, this.tanks, this.nodes);
+				this.tanks[i].updateBadTank(this.walls, this.wallSegments, this.wallSegmentsDict, this.holesDict, this.tanks, this.tankSpecters, this.nodes);
 			}
 		}
 		if(this.player.alive){
@@ -1202,6 +1202,16 @@ class PlayScene : AbstractScene {
 		}
 		
 		this.tanksCollisions();
+		
+		for(i = 0; i < this.tankSpecters.length; i++){
+			this.tankSpecters[i].updateSpecter();
+		}
+		
+		for(i = 0; i < this.tankSpecters.length; i++){
+			if(!this.tankSpecters[i].alive){
+				this.tankSpecters.remove(i);
+			}
+		}
 		
 		//update object lists
 		for(i = 0; i<this.tanks.length; i++){
@@ -1340,6 +1350,9 @@ class PlayScene : AbstractScene {
 		holeKeys = this.holes.keys();
 		for(i = 0; i < holeKeys.length; i++){
 			this.holes[holeKeys[i]].drawHole();
+		}
+		for(i = 0; i<this.tankSpecters.length; i++){
+			this.tankSpecters[i].drawSpecter();
 		}
 		for(i = 0; i<this.tanks.length; i++){
 			for(j = 0; j<this.tanks[i].explosions.length; j++){
