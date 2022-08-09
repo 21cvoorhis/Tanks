@@ -1,0 +1,21 @@
+﻿For the password system, make a function that handles all the changes at the end of the constructor
+
+Easy
+eiffel65: Make every tank blue, i.e. the player character color
+clapoff: Make everything dark (rgb shift are all -1000), so walls and the floor blend together
+notebook: Make everything white (rgb shift are all +1000), so bullets are invisible and it looks like a notebook drawing
+spinny: Increase all enemy tanks' gunW by 4
+
+Medium
+rainbow: Make the border walls flash rainbow colors
+
+Hard
+asteroids: Make the player character into the asteroids ship
+shadows: use the light-casting algorithm to only show the tank's line of sight
+
+Unknown
+colin: something fun
+daft: make a robot rock sound effect and boot the player back to the menu 
+	(maybe also add a little daft punk helmet image in each top corner)
+	have it start louder then fade out
+	Have the heads bop up and down to the beat of the music then fade when the song stops
