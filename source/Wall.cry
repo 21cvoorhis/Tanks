@@ -5,12 +5,6 @@ import TwoCansAlpha4;
 
 //format is intentionally similar to the Graphics2D rectangle function
 
-/*
-- For destructable walls, make sure to update the pathfinding mesh
-	- For the relevant node, change it's weight, then for each of its neighbors rerun the find neighbors command
-- Update position to be in the middle of the block, not the left corner
-*/
-
 class Wall{
 	
 	field pos;

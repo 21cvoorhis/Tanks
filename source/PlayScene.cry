@@ -5,25 +5,6 @@ import Random;
 import Resources;
 import TwoCansAlpha4;
 
-/*
-To-do:
-- Make tanks fade out when they're killed?
-	- If it's from a bullet, shoot off as described below, if its an explosion, do as the walls do?
-	- Make the gun fly off the direction it's facing
-		- Make it spin a little too
-	- Make the circle turret part fly off in the opposite direction
-	- Have all of those parts fade out within half a second
-- Add music and sound effects?
-- Add tank tracks for the player?
-*/
-
-const BR = 127; //background r
-const BG = 127; //background g
-const BB = 127; //background b
-const DT = (1.0/60.0);
-const WIDTH = 640;
-const HEIGHT = 480;
-
 //default settings for a given tank parameter
 const VEL = 75.0;
 const MAX_SHOT_TIME = 4.0;
@@ -39,444 +20,12 @@ enum ShotType { NONE, DIRECT, BANKED, LEAD }
 enum PlantType { NONE, YES }
 enum MoveType { NONE, DIRECT, RANDOM, NORMAL, DISTANCE }
 
-//mix
-function mix(start, end, amount){
-	return (1-amount)*start + amount*end;
-}
-
-function mixColor(c1, c2, amount){
-	r = mix(c1[0], c2[0], amount);
-	g = mix(c1[1], c2[1], amount);
-	b = mix(c1[2], c2[2], amount);
-	try{
-		a = c1[3];
-		return [r, g, b, a];
-	}catch(Core.IndexOutOfRangeException){
-		return [r, g, b];
-	}
-}
-
-function smoothRotate(current, target){ //smoothly interpolate between two angles
-	
-	if(current == null || target == null){
-		return current;
-	}
-	
-	//checks to see if they are further than pi apart, and adjust target by 2pi to be closer to current
-	if(Math.abs(current-target) > Math.PI){
-		if(target > 0){
-			target = target - (2*Math.PI);
-		}else{
-			target = target + (2*Math.PI);
-		}
-	}
-	
-	//uses exponential smoothing with 3 mix values to make the tank turn smoothly
-	if(Math.abs(current-target) > Math.PI/4){
-		current = mix(current, target, 0.1);
-	}else if(Math.abs(current-target) > Math.PI/8){
-		current = mix(current, target, 0.2);
-	}else if(Math.abs(current-target) > 0.00001){
-		current = mix(current, target, 0.3);
-	}else{
-		current = target;
-	}
-	
-	//adjust bAngle back by 2pi
-	if(current>Math.PI){
-		return current - 2*Math.PI;
-	}else if(current<-Math.PI){
-		return current + 2*Math.PI;
-	}
-	return current;
-}
-
-function linearRotate(angle, w){
-	
-	angle += w;
-	
-	if(angle>Math.PI){
-		angle -= 2*Math.PI;
-	}else if(angle<-Math.PI){
-		angle += 2*Math.PI;
-	}
-	
-	return angle;
-}
-
-//math
-function triangleArea(x1, y1, x2, y2, x3, y3){
-	return Math.abs(((x1*y2)+(x2*y3)+(x3*y1)-(y1*x2)-(y2*x3)-(y3*x1))/2.0);
-}
-
-function pointDistance(x1, y1, x2, y2){
-	return (((x2-x1)**2) + ((y2-y1)**2))**0.5;
-}
-
-//collision
-function pointRectCollision(point, rect){
-	return
-		point[0] > rect.left &&
-		point[0] < rect.right &&
-		point[1] > rect.top &&
-		point[1] < rect.bottom;
-}
-
-function pointCircleCollision(point, circlePos, circleR) {
-	dx = point[0] - circlePos[0];
-	dy = point[1] - circlePos[1];
-	return dx ** 2 + dy ** 2 < circleR ** 2;
-}
-
-function pointSegmentCollision(point, s) {
-	
-	d1 = (((s[0][0] - point[0])**2) + ((s[0][1] - point[1])**2))**0.5;
-	d2 = ((s[1][0] - point[0])**2 + (s[1][1] - point[1])**2)**0.5;
-	
-	lineLen = (((s[1][0] - s[0][0])**2) + ((s[1][1] - s[0][1])**2))**0.5;
-	
-	buffer = 0.1;    // higher # = less accurate
-	
-	if (d1+d2 >= lineLen-buffer && d1+d2 <= lineLen+buffer) {
-		return true;
-	}
-	return false;
-}
-
-function pointQuadCollision(point, quad){
-	
-	qTri1 = triangleArea(quad[0][0], quad[0][1], quad[1][0], quad[1][1], quad[2][0], quad[2][1]);
-	qTri2 = triangleArea(quad[2][0], quad[2][1], quad[3][0], quad[3][1], quad[0][0], quad[0][1]);
-	quadArea = qTri1 + qTri2;
-	
-	pArea = 0.0;
-	for(i = 0; i<4; i++){
-		if(i<3){
-			pArea += (triangleArea(point[0], point[1], quad[i][0], quad[i][1], quad[i+1][0], quad[i+1][1]));
-		}else{
-			pArea += (triangleArea(point[0], point[1], quad[i][0], quad[i][1], quad[0][0], quad[0][1]));
-		}
-	}
-	
-	return !(pArea>quadArea);
-}
-
-function circleCircleCollision(c1pos, c1r, c2pos, c2r) {
-	dx = c1pos[0] - c2pos[0];
-	dy = c1pos[1] - c2pos[1];
-	return (dx ** 2) + (dy ** 2) < (c1r + c2r) ** 2;
-}
-
-function circleRectCollision(circlePos, circleR, rect){
-    if (circlePos[0] + circleR < rect["left"]) return false;
-    if (circlePos[0] - circleR > rect["right"]) return false;
-    if (circlePos[1] + circleR < rect["top"]) return false;
-    if (circlePos[1] - circleR > rect["bottom"]) return false;
-
-    dx = null;
-    dy = null;
-    if (circlePos[0] < rect["left"]) {
-        if (circlePos[1] < rect["top"]) {
-            dx = circlePos[0] - rect["left"];
-            dy = circlePos[1] - rect["top"];
-        } else if (circlePos[1] > rect["bottom"]) {
-            dx = circlePos[0] - rect["left"];
-            dy = circlePos[1] - rect["bottom"];
-        }
-    } else if (circlePos[0] > rect["right"]) {
-        if (circlePos[1] < rect["top"]) {
-            dx = circlePos[0] - rect["right"];
-            dy = circlePos[1] - rect["top"];
-        } else if (circlePos[1] > rect["bottom"]) {
-            dx = circlePos[0] - rect["right"];
-            dy = circlePos[1] - rect["bottom"];
-        }
-    }
-
-    if (dx != null) {
-        return dx ** 2 + dy ** 2 < circleR ** 2;
-    }
-
-    return true;
-}
-
-function circleSegmentCollision(circlePos, circleR, s){
-	
-	inside1 = pointCircleCollision(s[0], circlePos, circleR);
-	inside2 = pointCircleCollision(s[1], circlePos, circleR);
-	if (inside1 || inside2){
-		return true;
-	}
-	
-	distX = s[0][0] - s[1][0];
-	distY = s[0][1] - s[1][1];
-	len = ((distX*distX) + (distY*distY))**0.5;
-	
-	// get dot product of the line and circle
-	dot = (((circlePos[0]-s[0][0])*(s[1][0]-s[0][0])) + ((circlePos[1]-s[0][1])*(s[1][1]-s[0][1]))) / (len**2);
-	
-	// find the closest point on the line
-	closestX = s[0][0] + (dot * (s[1][0]-s[0][0]));
-	closestY = s[0][1] + (dot * (s[1][1]-s[0][1]));
-	
-	onS = pointSegmentCollision([closestX, closestY], s);
-	if (!onS){
-		return false;
-	}
-	
-	distX = closestX - circlePos[0];
-	distY = closestY - circlePos[1];
-	distance = ((distX**2) + (distY**2))**0.5;
-
-	if (distance <= circleR) {
-		return true;
-	}
-	return false;
-}
-
-function circleQuadCollision(circlePos, circleR, quad){
-	
-	if(pointQuadCollision(circlePos, quad)){
-		return true;
-	}
-	
-	for(i = 0; i<4; i++){
-		if(i<3){
-			if(circleSegmentCollision(circlePos, circleR, [quad[i], quad[i+1]])){
-				return true;
-			}
-		}else{
-			if(circleSegmentCollision(circlePos, circleR, [quad[i], quad[0]])){
-				return true;
-			}
-		}
-	}
-	
-	return false;
-}
-
-function segmentSegmentCollision(s0, s1){ //https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
-	
-	o1 = orientation(s0[0], s0[1], s1[0]);
-	o2 = orientation(s0[0], s0[1], s1[1]);
-	o3 = orientation(s1[0], s1[1], s0[0]);
-	o4 = orientation(s1[0], s1[1], s0[1]);
-	
-    // General case
-    if(o1 != o2 && o3 != o4){
-		return true;
-	}
-	
-    // Special Cases
-    if (o1 == 0 && onSegment(s0[0], s1[0], s0[1])){
-		return true;
-	}
-	
-    if (o2 == 0 && onSegment(s0[0], s1[1], s0[1])){
-		return true;
-	}
-	
-    if (o3 == 0 && onSegment(s1[0], s0[0], s1[1])){
-		return true;
-	}
-	
-    if (o4 == 0 && onSegment(s1[0], s0[1], s1[1])){
-		return true;
-	}
-	
-    return false; // Doesn't fall in any of the above cases
-	
-}
-function orientation(p0, p1, p2){
-	
-	val = ((p1[1] - p0[1]) * (p2[0] - p1[0])) - ((p1[0] - p0[0]) * (p2[1] - p1[1]));
-	
-	if(val == 0){
-		return 0; //collinear
-	}
-	return (val > 0)? 1: 2; //1 = clockwise, 2 = counterclockwise
-}
-function onSegment(p0, p1, p2){
-    if (p1[0] <= max(p0[0], p2[0]) && p1[0] >= Math.min(p0[0], p2[0]) &&
-        p1[1] <= max(p0[1], p2[1]) && p1[1] >= Math.min(p0[1], p2[1])){
-       return true;
-	}
-    return false;
-}
-
-function segmentSegmentIntersection(s0, s1){
-	//ray's starting x and y points (px and py), and parametric component directions (dx and dy)
-	r_px = s0[0][0];
-	r_py = s0[0][1];
-	r_dx = (s0[1][0]-r_px);
-	r_dy = (s0[1][1]-r_py);
-	
-	//same as above for the line segment
-	s_px = s1[0][0];
-	s_py = s1[0][1];
-	s_dx = (s1[1][0]-s_px);
-	s_dy = (s1[1][1]-s_py);
-	
-	//Find if the lines are parallel, if so there's no intersection
-	r_mag = (((r_dx*r_dx)+(r_dy*r_dy))**0.5);
-	s_mag = (((s_dx*s_dx)+(s_dy*s_dy))**0.5);
-	
-	//check for /0 error
-	if(r_mag==0){
-		return null;
-	}
-	
-	if(r_dx/r_mag==s_dx/s_mag && r_dy/r_mag==s_dy/s_mag){
-		return null;
-	}
-	
-	//find T1 and T2, for the parametric equations
-	try{
-		t2 = ((r_dx*(s_py-r_py)) + (r_dy*(r_px-s_px)))/((s_dx*r_dy) - (s_dy*r_dx));
-		t1 = (s_px+(s_dx*t2)-r_px)/r_dx;
-	}catch(Exception e){
-		//catches /0 errors when lines are straight horizontal/vertical
-		t2 = ((r_dx*(s_py-r_py)) + (r_dy*(r_px-s_px)))/((s_dx*r_dy) - (s_dy*r_dx));
-		t1 = (s_py+s_dy*t2-r_py)/r_dy; //this is added from my previous version because only r_dx ever throws an error
-	}
-	
-	//if the parametric T values are past these parameters the intersection isn't on the segments
-	if(t1<0.0 || t1>1.0){
-		return null;
-	}
-	if(t2<-0.00001 || t2>1.00001){
-		return null;
-	}
-	
-	//otherwise, you're good, and can plug in all the variables you just found to find the point of intersection [x, y, t]
-	return [r_px+(r_dx*t1), r_py+(r_dy*t1), t1];
-	
-}
-
-//misc. code
-function pointsToSegments(points){
-	segments = [];
-	for(i = 0; i<points.length; i++){
-		if(i<points.length-1){
-			segments.add([points[i].clone(), points[i+1].clone()]);
-		}else{
-			segments.add([points[i].clone(), points[0].clone()]);
-		}
-	}
-	return segments;
-}
-
-function segmentsEqual(s0, s1){
-	return
-		(s0[0][0] == s1[0][0] &&
-		s0[0][1] == s1[0][1] &&
-		s0[1][0] == s1[1][0] &&
-		s0[1][1] == s1[1][1]) ||
-		(s0[0][0] == s1[1][0] &&
-		s0[0][1] == s1[1][1] &&
-		s0[1][0] == s1[0][0] &&
-		s0[1][1] == s1[0][1]);
-}
-
-function listsEqual(l0, l1){
-	
-	if(l0.length != l1.length){
-		return false;
-	}
-	
-	for(i = 0; i<l0.length; i++){
-		if(l0[i] != l1[i]){
-			return false;
-		}
-	}
-	
-	return true;
-	
-}
-
-function segmentListsEqual(l0, l1){
-
-	if(listsEqual(l0, l1)){
-		return true;
-	}
-	
-	for(i = 0; i<l0.length; i++){
-		if(!segmentsEqual(l0[i],l1[i])){
-			return false;
-		}
-	}
-	
-	return true;
-	
-}
-
-function mergeIntervals(v){
-	
-	if(v == null || v.length == 0){
-		return null;
-	}
-	
-	v = sortIntervals(v);
-	intervals = [];
-	
-	intervals.add([v[0][0], v[0][1]]);
-	
-	for(i = 1; i<v.length; i++){
-		x1 = v[i][0];
-		y1 = v[i][1];
-		x2 = intervals[intervals.length - 1][0];
-		y2 = intervals[intervals.length - 1][1];
-		
-		if(y2 >= x1) {
-			intervals[intervals.length - 1][1] = Math.max(y1, y2);
-		} else {
-			intervals.add([x1, y1]);
-		}
-	}
-	
-	return intervals;
-	
-}
-function sortIntervals(v){
-	
-	currentList = v;
-	intervals = [];
-	finalList = [];
-	
-	for(i : currentList){
-		if(i[0] < i[1]){
-			intervals.add([i[0], i[1]]);
-		}else{
-			intervals.add([i[1], i[0]]);
-		}
-	}
-	
-	while(intervals.length > 0){
-		
-		currentMin = intervals[0][0];
-		currentMinIndex = 0;
-		for(i = 0; i<intervals.length; i++){
-			if(intervals[i][0] < currentMin){
-				currentMin = intervals[i][0];
-				currentMinIndex = i;
-			}
-		}
-		finalList.add(intervals[currentMinIndex]);
-		intervals.remove(currentMinIndex);
-		
-	}
-	
-	return finalList;
-}
-
 function tileToIndex(t){
-
 	if(Math.ensureRange(0, 14, t[0]) == t[0] && Math.ensureRange(0, 10, t[1]) == t[1]){
 		return t[0] + t[1] * 15;
 	}else{
 		return null;
 	}
-	
 }
 function tileToPos(t){
 	return [40.0+40*(t[0]), 40.0+40*(t[1])];
@@ -512,26 +61,7 @@ function findHole(tile, holes){
 	}
 }
 
-function fade(fadeTime, alpha, fadeIn){
-	
-	if(fadeIn){
-		if(alpha >= 255){
-			return alpha;
-		}else{
-			return alpha + (255.0*DT/fadeTime);
-		}
-	}else{
-		if(alpha <= 0){
-			return alpha;
-		}else{
-			return alpha - (255.0*DT/fadeTime);
-		}
-	}
-}
-
 class PlayScene : AbstractScene {
-	
-	field backdropColor = [BR, BG, BB];
 	
 	field player;
 	field playerWon = false;
@@ -571,10 +101,12 @@ class PlayScene : AbstractScene {
 	field startSceneTimeLeft = 3.5;
 	field sceneChangeTimeLeft = 1.5;
 	field pause = false;
+	field rgbShift;
 	
-	constructor(levelNames, levelIndex, lives, deadTankTiles, deadWallTiles) : base() {
+	constructor(levelNames, rgbShift, levelIndex, lives, deadTankTiles, deadWallTiles) : base() {
 		
 		this.levelNames = levelNames;
+		this.rgbShift = rgbShift;
 		this.levelIndex = levelIndex;
 		this.lives = lives;
 		this.deadTankTiles = deadTankTiles;
@@ -586,80 +118,80 @@ class PlayScene : AbstractScene {
 		}
 		
 		//border walls
-		this.walls.add(new Wall([0.0,0.0], 20.0, HEIGHT*1.0, [63, 63, 63, 0]));
-		this.walls.add(new Wall([WIDTH-20.0,0.0], 20.0, HEIGHT*1.0, [63, 63, 63, 0]));
-		this.walls.add(new Wall([0,0], WIDTH*1.0, 20.0, [63, 63, 63, 0]));
-		this.walls.add(new Wall([0.0,HEIGHT-20.0], WIDTH*1.0, 20.0, [63, 63, 63, 0]));
+		this.walls.add(new Wall([0.0,0.0], 20.0, HEIGHT*1.0, backColorShift(rgbShift, -64, -64, -64, false)));
+		this.walls.add(new Wall([WIDTH-20.0,0.0], 20.0, HEIGHT*1.0, backColorShift(rgbShift, -64, -64, -64, false)));
+		this.walls.add(new Wall([0,0], WIDTH*1.0, 20.0, backColorShift(rgbShift, -64, -64, -64, false)));
+		this.walls.add(new Wall([0.0,HEIGHT-20.0], WIDTH*1.0, 20.0, backColorShift(rgbShift, -64, -64, -64, false)));
 		
 		this.getMapText(this.fileName);
 		//new BadTank(pos, radius, color, vel, |||shotType|||, maxShotTime, maxBullets, bulletSpeed, bulletBounces, |||plantType|||, maxPlantTime, maxMines, mineTime, moveType)
 		for(i = 0; i<this.mapText.length; i++){
 			switch(this.mapText[i]){
 				case 'W':
-					this.walls.add(new Wall([20.0+40*(i%15), 20.0+40*Math.floor(i/15)], 40.0, 40.0, [63, 63, 63, 0]));
+					this.walls.add(new Wall([20.0+40*(i%15), 20.0+40*Math.floor(i/15)], 40.0, 40.0, backColorShift(this.rgbShift.clone(), -64, -64, -64, false)));
 					break;
 				case 'w':
-					this.walls.add(new WeakWall([20.0+40*(i%15), 20.0+40*Math.floor(i/15)], 40.0, 40.0, [127, 63, 0, 0]));
+					this.walls.add(new WeakWall([20.0+40*(i%15), 20.0+40*Math.floor(i/15)], 40.0, 40.0, [127+(this.rgbShift[0]/2), 63+(this.rgbShift[1]/2), 0+(this.rgbShift[2]/2), 0]));
 					break;
 				case 'H':
 					this.holes[tileToIndex([i%15, Math.floor(i/15)])] = new Hole([20.0+40*(i%15), 20.0+40*Math.floor(i/15)], 40.0, 40.0, [0, 0, 0, 0]);
 					break;
 				case 'P':
-					this.player = new Tank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [63, 63, 255, 0], 
+					this.player = new Tank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [63, 63, 255, 0], this.rgbShift.clone(),
 					VEL, 
 					MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					MAX_MINES, MINE_TIME);
 					break;
 				case 'b': //nonmoving banked shot
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [127, 63, 0, 0],  
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [127, 63, 0, 0], this.rgbShift.clone(),
 					MoveType.NONE, VEL, 
 					ShotType.BANKED, MAX_SHOT_TIME*1.5, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
 				case 'B': //nonmoving fast banked shot
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [0, 127, 127, 0],  
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [0, 127, 127, 0], this.rgbShift.clone(),
 					MoveType.NONE, VEL, 
 					ShotType.BANKED, MAX_SHOT_TIME, MAX_BULLETS-3, FAST_BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
 				case 'M': //moving tank with basic attacks
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [100, 100, 80, 0], 
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [100, 100, 80, 0], this.rgbShift.clone(),
 					MoveType.NORMAL, VEL*0.75, 
 					ShotType.DIRECT, MAX_SHOT_TIME, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
 				case 'm': //mine planter
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [255, 255, 0, 0], 
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [255, 255, 0, 0], this.rgbShift.clone(),
 					MoveType.RANDOM, VEL*(4.0/3.0), 
 					ShotType.NONE, MAX_SHOT_TIME, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.YES, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
-				case 'r': //randomly moving tank with a fast banked shot (unused)
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [255, 127, 63, 0], 
-					MoveType.RANDOM, VEL, 
-					ShotType.DIRECT, MAX_SHOT_TIME, MAX_BULLETS, FAST_BULLET_SPEED, BULLET_BOUNCES, 
-					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
-					break;
 				case 'F': //moving tank with fast, 1 bounce shot
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [0, 80, 0, 0], 
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [0, 80, 0, 0], this.rgbShift.clone(),
 					MoveType.DISTANCE, VEL*0.75, 
 					ShotType.DIRECT, MAX_SHOT_TIME, MAX_BULLETS-3, FAST_BULLET_SPEED, BULLET_BOUNCES-1, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
 				case 'D': //moving tank with the player's attacks
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [31, 31, 127, 0], 
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [31, 31, 127, 0], this.rgbShift.clone(),
 					MoveType.NORMAL, VEL*0.75, 
 					ShotType.DIRECT, MAX_SHOT_TIME, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.YES, MAX_PLANT_TIME*1.5, MAX_MINES, MINE_TIME));
 					break;
 				case 'Z': //moving tank with a fast shot and a faster reload
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [191, 63, 63, 0], 
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [191, 63, 63, 0], this.rgbShift.clone(),
 					MoveType.DIRECT, VEL*0.8, 
 					ShotType.DIRECT, MAX_SHOT_TIME-2.5, MAX_BULLETS-2, FAST_BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 					break;
+				case 'r': //randomly moving tank with a fast banked shot (unused)
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [255, 127, 63, 0], this.rgbShift.clone(),
+					MoveType.RANDOM, VEL, 
+					ShotType.DIRECT, MAX_SHOT_TIME, MAX_BULLETS, FAST_BULLET_SPEED, BULLET_BOUNCES, 
+					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
+					break;
 				case 'T': //test case, usable for target practice
-					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [127, 127, 127, 0], 
+					this.tanks.add(new BadTank([40+40*(i%15), 40+40*Math.floor(i/15)], 20.0, [127, 127, 127, 0], this.rgbShift.clone(),
 					MoveType.NONE, VEL, 
 					ShotType.NONE, MAX_SHOT_TIME, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 					PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
@@ -696,18 +228,21 @@ class PlayScene : AbstractScene {
 		this.tutorialText.add(font.render("A"));
 		this.tutorialText.add(font.render("S"));
 		this.tutorialText.add(font.render("D"));
+		this.tutorialText.add(font.render("P"));
+		this.tutorialText.add(font.render(""));
 		
-		tankPos = [[40+(40*1.25), 40+(40*2)], [40+(40*0.75), 40+(40*6.25)], [40+(40*1.75), 40+(40*9.675)]];
+		//pre-pause button: tankPos = [[40+(40*1.25), 40+(40*2)], [40+(40*0.75), 40+(40*6.25)], [40+(40*1.75), 40+(40*9.675)]];
+		tankPos = [[40+(40*1.25), 40+(40*2)], [40+(40*0.75), 40+(40*6.25)-30], [40+(40*1.75), 40+(40*8.25)]];
 		
 		for(i = 0; i < tankPos.length; i++){
-			this.fakeTanks.add(new BadTank(tankPos[i], 20.0, [63, 63, 255, 0], 
+			this.fakeTanks.add(new BadTank(tankPos[i], 20.0, [63, 63, 255, 0], this.rgbShift.clone(),
 				MoveType.NONE, VEL, 
 				ShotType.NONE, MAX_SHOT_TIME, MAX_BULLETS, BULLET_SPEED, BULLET_BOUNCES, 
 				PlantType.NONE, MAX_PLANT_TIME, MAX_MINES, MINE_TIME));
 		}
 		
-		this.fakeBullet = new Bullet([40+(40*2.25), 40+(40*6.25)], 4.0, [255, 255, 255, this.fakeAlpha], 0, 0, 1, []);
-		this.fakeMine = new Mine([40+(40*0.75), 40+(40*9.675)], 20/3.0, [255, 255, 0, this.fakeAlpha], 10000);
+		this.fakeBullet = new Bullet([40+(40*2.25), 40+(40*6.25)-30], 4.0, [255, 255, 255, this.fakeAlpha], this.rgbShift.clone(), 0, 0, 1, []);
+		this.fakeMine = new Mine([40+(40*0.75), 40+(40*8.25)], 20/3.0, [255, 255, 0, this.fakeAlpha], 10000);
 		
 	}
 	
@@ -1043,7 +578,7 @@ class PlayScene : AbstractScene {
 	function update(inputManager, events) {
 		
 		//check for pausing
-		if(inputManager.isKeyPressedThisFrame(KeyboardKey.P)){
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.P) || inputManager.isKeyPressedThisFrame(KeyboardKey.ESCAPE)){
 			this.pause = !this.pause;
 		}
 		if(this.pause){
@@ -1074,10 +609,14 @@ class PlayScene : AbstractScene {
 					if(this.levelIndex%5 == 4){
 						this.switchSceneFade(new ExtraLifeScene(this.levelNames, ++this.levelIndex, this.lives, [], []));
 					}else{
-						this.switchSceneFade(new IntroScene(this.levelNames, ++this.levelIndex, this.lives, [], []));
+						this.switchSceneFade(new IntroScene(this.levelNames, this.rgbShift, ++this.levelIndex, this.lives, [], []));
 					}
 				}else{
-					this.switchSceneFade(new TitleScene());
+					if(!this.tutorial){
+						this.switchSceneFade(new WinScene());
+					}else{
+						this.switchSceneFade(new TitleScene(this.rgbShift.clone()));
+					}
 				}
 			}
 		}
@@ -1094,9 +633,9 @@ class PlayScene : AbstractScene {
 							this.deadTankTiles.add(this.tanks[i].initialTile.clone());
 						}
 					}
-					this.switchSceneFade(new IntroScene(this.levelNames, this.levelIndex, --this.lives, this.deadTankTiles, this.deadWallTiles));
+					this.switchSceneFade(new IntroScene(this.levelNames, this.rgbShift, this.levelIndex, --this.lives, this.deadTankTiles, this.deadWallTiles));
 				}else{
-					this.switchSceneFade(new TitleScene());
+					this.switchSceneFade(new TitleScene(this.rgbShift));
 				}
 				
 			}
@@ -1249,15 +788,6 @@ class PlayScene : AbstractScene {
 		
 	}
 	
-	
-	function pauseDraw(){
-		
-		Graphics2D.Draw.rectangle(0,0,WIDTH,HEIGHT,0,0,0,127);
-		Graphics2D.Draw.rectangle(((WIDTH/2)-120), ((HEIGHT/2)-120), 80, 240, 255, 255, 255, 127);
-		Graphics2D.Draw.rectangle(((WIDTH/2)+40), ((HEIGHT/2)-120), 80, 240, 255, 255, 255, 127);
-		
-	}
-	
 	function tutorialDraw(){
 		
 		for(i = 0; i < this.fakeTanks.length; i++){
@@ -1275,7 +805,14 @@ class PlayScene : AbstractScene {
 		this.fakeMine.drawMine();
 		
 		//draw wasd
-		keycapPos = [[40+(40*1.25), 40+(40*0)], [40+(40*0.35), 40+(40*0.9)], [40+(40*1.25), 40+(40*0.9)], [40+(40*2.15), 40+(40*0.9)]];
+		keycapPos = [
+		[40+(40*1.25), 40+(40*0)],
+		[40+(40*0.35), 40+(40*0.9)],
+		[40+(40*1.25), 40+(40*0.9)],
+		[40+(40*2.15), 40+(40*0.9)],
+		[40+(40*0.35), 40+(40*9.75)],
+		[40+(40*2.15), 40+(40*9.75)],
+		]; //add a P key and a pause button to these
 		
 		for(i = 0; i < keycapPos.length; i++){
 			
@@ -1288,6 +825,8 @@ class PlayScene : AbstractScene {
 			
 		}
 		
+		/*
+		pre-pause button
 		//draw mouse
 		Graphics2D.Draw.ellipse(40+(40*1.25)-22, 40+(40*3.95)-22, 44, 44, 0, 0, 0, this.fakeAlpha);
 		Graphics2D.Draw.ellipse(40+(40*1.25)-22, 40+(40*4.55)-22, 44, 44, 0, 0, 0, this.fakeAlpha);
@@ -1297,7 +836,7 @@ class PlayScene : AbstractScene {
 		Graphics2D.Draw.ellipse(40+(40*1.25)-20, 40+(40*4.55)-20, 40, 40, 127, 127, 127, this.fakeAlpha);
 		Graphics2D.Draw.rectangle(40+(40*1.25)-20, 40+(40*3.95), 39, 24, 127, 127, 127, this.fakeAlpha);
 		
-		Graphics2D.Draw.ellipse(40+(40*1.25)-16, 40+(40*3.95)-16, 28, 28, 63, 63, 63, this.fakeAlpha);
+		Graphics2D.Draw.ellipse(40+(40*1.25)-16, 40+(40*3.95)-16, 28, 28, BR-64+this.rgbShift[0], BG-64+this.rgbShift[1], BB-64+this.rgbShift[2], this.fakeAlpha);
 		Graphics2D.Draw.rectangle(40+(40*1.25)-3, 40+(40*3.95)-16, 15, 28, 127, 127, 127, this.fakeAlpha);
 		Graphics2D.Draw.rectangle(40+(40*1.25)-16, 40+(40*3.95)-3, 28, 15, 127, 127, 127, this.fakeAlpha);
 		
@@ -1307,12 +846,43 @@ class PlayScene : AbstractScene {
 		//draw space bar
 		Graphics2D.Draw.rectangle(40+(40*1.25)-60, 40+(40*8.375)-15, 120, 30, 0, 0, 0, this.fakeAlpha);
 		Graphics2D.Draw.rectangle(40+(40*1.25)-58, 40+(40*8.375)-13, 116, 26, 127, 127, 127, this.fakeAlpha);
+		*/
+		
+		//draw mouse
+		Graphics2D.Draw.ellipse(40+(40*1.25)-22, 40+(40*3.95)-42, 44, 44, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.ellipse(40+(40*1.25)-22, 40+(40*4.55)-42, 44, 44, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.rectangle(40+(40*1.25)-22, 40+(40*3.95)-20, 43, 28, 0, 0, 0, this.fakeAlpha);
+		
+		Graphics2D.Draw.ellipse(40+(40*1.25)-20, 40+(40*3.95)-40, 40, 40, 127, 127, 127, this.fakeAlpha);
+		Graphics2D.Draw.ellipse(40+(40*1.25)-20, 40+(40*4.55)-40, 40, 40, 127, 127, 127, this.fakeAlpha);
+		Graphics2D.Draw.rectangle(40+(40*1.25)-20, 40+(40*3.95)-20, 39, 24, 127, 127, 127, this.fakeAlpha);
+		
+		Graphics2D.Draw.ellipse(40+(40*1.25)-16, 40+(40*3.95)-36, 28, 28, BR-64+this.rgbShift[0], BG-64+this.rgbShift[1], BB-64+this.rgbShift[2], this.fakeAlpha);
+		Graphics2D.Draw.rectangle(40+(40*1.25)-3, 40+(40*3.95)-36, 15, 28, 127, 127, 127, this.fakeAlpha);
+		Graphics2D.Draw.rectangle(40+(40*1.25)-16, 40+(40*3.95)-23, 28, 15, 127, 127, 127, this.fakeAlpha);
+		
+		Graphics2D.Draw.line(40+(40*1.25), 40+(40*3.95)-40, 40+(40*1.25), 40+(40*3.95)-20, 2, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.line(40+(40*1.25)-22, 40+(40*3.95)-20, 40+(40*1.25)+22, 40+(40*3.95)-20, 2, 0, 0, 0, this.fakeAlpha);
+		
+		//draw space bar
+		Graphics2D.Draw.rectangle(40+(40*1.25)-60, 40+(40*7)-15, 120, 30, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.rectangle(40+(40*1.25)-58, 40+(40*7)-13, 116, 26, 127, 127, 127, this.fakeAlpha);
+		
+		//draw pause button icon
+		Graphics2D.Draw.rectangle(keycapPos[5][0]-7, keycapPos[5][1]-10, 5, 20, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.rectangle(keycapPos[5][0]+2, keycapPos[5][1]-10, 5, 20, 0, 0, 0, this.fakeAlpha);
+		
+		//draw arrow between p key and pause icon
+		Graphics2D.Draw.rectangle(40+(40*1.25)-13, 40+(40*9.75)-5, 24, 10, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.triangle(40+(40*1.25)+17, 40+(40*9.75), 40+(40*1.25)+7, 40+(40*9.75)-10, 40+(40*1.25)+7, 40+(40*9.75)+10, 0, 0, 0, this.fakeAlpha);
+		Graphics2D.Draw.rectangle(40+(40*1.25)-11, 40+(40*9.75)-3, 20, 6, 127, 127, 127, this.fakeAlpha);
+		Graphics2D.Draw.triangle(40+(40*1.25)+15, 40+(40*9.75), 40+(40*1.25)+8, 40+(40*9.75)-7, 40+(40*1.25)+8, 40+(40*9.75)+7, 127, 127, 127, this.fakeAlpha);
 		
 	}
 	
 	function render(){
 		
-		Graphics2D.Draw.fill(BR, BG, BB);
+		Graphics2D.Draw.fill(BR+this.rgbShift[0], BG+this.rgbShift[1], BB+this.rgbShift[2]);
 		
 		//draw the lines in the background
 		lines = 24;
@@ -1324,7 +894,7 @@ class PlayScene : AbstractScene {
 				}else{
 					right = WIDTH;
 				}
-				Graphics2D.Draw.line(0, h, right, h, 10, BR-2, BG-2, BB-2);
+				Graphics2D.Draw.line(0, h, right, h, 10, BR-2+this.rgbShift[0], BG-2+this.rgbShift[1], BB-2+this.rgbShift[2]);
 			}
 		}else{
 			for(i = 1; i < lines; i++){
@@ -1334,7 +904,7 @@ class PlayScene : AbstractScene {
 				}else{
 					left = 0;
 				}
-				Graphics2D.Draw.line(left, h, 640, h, 10, BR-2, BG-2, BB-2);
+				Graphics2D.Draw.line(left, h, 640, h, 10, BR-2+this.rgbShift[0], BG-2+this.rgbShift[1], BB-2+this.rgbShift[2]);
 			}
 		}
 		
@@ -1392,7 +962,7 @@ class PlayScene : AbstractScene {
 		}
 		
 		if(this.pause){
-			this.pauseDraw();
+			pauseDraw();
 		}
 		//testing
 		/*for(s : this.wallSegments){

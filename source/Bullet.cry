@@ -7,11 +7,15 @@ import TwoCansAlpha4;
 
 class Bullet : Object{
 	
+	field rgbShift;
+	
 	field bouncesLeft; //how many times a bullet can hit a wall
 	field explode; //displays if the bullet should explode or not based on it's death
 	field specters; //effect for fast bullets
 	
-	constructor(pos, radius, color, vel, vAngle, bouncesLeft, specters) : base(pos, radius, color){
+	constructor(pos, radius, color, rgbShift, vel, vAngle, bouncesLeft, specters) : base(pos, radius, color){
+		
+		this.rgbShift = rgbShift;
 		
 		this.vel = vel;
 		this.vAngle = vAngle;
@@ -38,7 +42,7 @@ class Bullet : Object{
 			try{
 				temp = holes[tileToIndex(this.tile)];
 			}catch(Core.KeyNotFoundException){
-				this.specters.add(new BulletSpecter(this.pos.clone(), this.r, this.color.clone(), this.vAngle));
+				this.specters.add(new BulletSpecter(this.pos.clone(), this.r, this.color.clone(), this.rgbShift.clone(), this.vAngle));
 			}catch(Core.InvalidKeyException){}
 		}
 		
@@ -148,15 +152,18 @@ class Bullet : Object{
 
 class BulletSpecter : Object{
 	
+	field rgbShift;
 	field mixColor;
 	field buttPoints;
 	
-	constructor(pos, radius, color, vAngle) : base(pos, radius, color){
+	constructor(pos, radius, color, rgbShift, vAngle) : base(pos, radius, color){
+		
+		this.rgbShift = rgbShift;
 		
 		this.vAngle = vAngle;
 		
 		this.timeLeft = 1.0;
-		this.mixColor = [BR, BG, BB, 255];
+		this.mixColor = [BR + rgbShift[0], BG + rgbShift[1], BB + rgbShift[2], 255];
 		
 		this.buttPoints = [[],[],[],[]];
 		tempAngle = this.vAngle - (Math.PI/2);

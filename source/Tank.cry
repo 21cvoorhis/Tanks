@@ -7,6 +7,8 @@ import TwoCansAlpha4;
 
 class Tank : Object{
 	
+	field rgbShift;
+	
 	//body vars
 	field bAngle; //angle the body is facing
 	field bPoints; //points that make the body's square
@@ -33,7 +35,9 @@ class Tank : Object{
 	field mineTime;
 	field explosions;
 	
-	constructor(pos, radius, color, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime) : base(pos, radius, color){
+	constructor(pos, radius, color, rgbShift, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime) : base(pos, radius, color){
+		
+		this.rgbShift = rgbShift;
 		
 		this.vel = vel;
 		
@@ -80,7 +84,7 @@ class Tank : Object{
 		if(this.bullets.length < this.maxBullets && !this.gCollision([1.3*this.r*cos(this.gAngle) + this.pos[0], 1.3*this.r*sin(this.gAngle) + this.pos[1]], walls)){
 			bx = this.pos[0] + (1.1*this.r*cos(this.gAngle));
 			by = this.pos[1] + (1.1*this.r*sin(this.gAngle));
-			this.bullets.add(new Bullet([bx, by], this.bulletR, [255, 255, 255, 255], this.bulletSpeed, this.gAngle, this.bulletBounces, this.specters));
+			this.bullets.add(new Bullet([bx, by], this.bulletR, [255, 255, 255, 255], this.rgbShift.clone(), this.bulletSpeed, this.gAngle, this.bulletBounces, this.specters));
 		}
 	}
 	
@@ -204,8 +208,8 @@ class Tank : Object{
 		
 		tempAngle = 0.0;
 		basePoints = [[],[],[],[]];
-		gPoints = [[],[],[],[]];	
-			
+		gPoints = [[],[],[],[]];
+		
 		for(i = 0; i < 4; i++){
 			tempAngle = ((Math.PI*2)/4) * i + (Math.PI/4) + this.bAngle;
 			this.bPoints[i] = [this.pos[0] + (this.r*Math.cos(tempAngle)), this.pos[1] + (this.r*Math.sin(tempAngle))];
@@ -240,6 +244,7 @@ class Tank : Object{
 			gPoints[2][0], gPoints[2][1], 
 			gPoints[3][0], gPoints[3][1], 
 			0, 0, 0, this.color[3]);
+		
 		//circle turret
 		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.6), this.pos[1]-(this.r*0.6), this.r*1.2, this.r*1.2, 0, 0, 0, this.color[3]);
 		Graphics2D.Draw.ellipse(this.pos[0]-(this.r*0.5), this.pos[1]-(this.r*0.5), this.r, this.r, this.color[0], this.color[1], this.color[2], this.color[3]);

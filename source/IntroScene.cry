@@ -16,17 +16,21 @@ class IntroScene : AbstractScene{
 	field livesText;
 	field alpha;
 	
-	field timeLeft;
+	field rgbShift;
 	
-	constructor(levelNames, index, lives, deadTankTiles, deadWallTiles) : base(){
+	field timeLeft;
+	field pause = false;
+	
+	constructor(levelNames, rgbShift, index, lives, deadTankTiles, deadWallTiles) : base(){
 		
 		this.levelNames = levelNames;
+		this.rgbShift = rgbShift;
 		this.index = index;
 		this.lives = lives;
 		this.deadTankTiles = deadTankTiles;
 		this.deadWallTiles = deadWallTiles;
 		
-		this.indexText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render("Level " + (index+1));
+		this.indexText = FontResource.fromSystem("Bahnschrift").getRenderer().setSize(24).setColor(0, 0, 0).render("Level " + (index+1));
 		
 		levelString = levelNames[index];
 		newLevelString = "";
@@ -45,16 +49,26 @@ class IntroScene : AbstractScene{
 			newLevelString = levelString;
 		}
 		
-		this.levelNameText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render("\"" + newLevelString + "\"");
+		this.levelNameText = FontResource.fromSystem("Bahnschrift").getRenderer().setSize(24).setColor(0, 0, 0).render("\"" + newLevelString + "\"");
 		
 		if(lives == 1){
-			this.livesText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render(lives + " life");
+			this.livesText = FontResource.fromSystem("Bahnschrift").getRenderer().setSize(24).setColor(0, 0, 0).render(lives + " Life");
 		}else{
-			this.livesText = FontResource.fromSystem("Times New Roman").getRenderer().setSize(24).setColor(0, 0, 0).render(lives + " lives");
+			this.livesText = FontResource.fromSystem("Bahnschrift").getRenderer().setSize(24).setColor(0, 0, 0).render(lives + " Lives");
 		}
 		this.alpha = 255;
 		
 		this.timeLeft = 2.0;
+		
+		if(index<5){
+			this.rgbShift = [0, 32, 0]; //green
+		}else if(index<10){
+			this.rgbShift = [16, -32, 64]; //purple
+		}else if(index<15){
+			this.rgbShift = [-32, -32, 32]; //blue
+		}else if(index<20){
+			this.rgbShift = [-32, -32, -16]; //navy blue/black
+		}
 		
 	}
 	
@@ -70,9 +84,15 @@ class IntroScene : AbstractScene{
 		|| d == '8' 
 		|| d == '9';
 	}
-
 	
 	function update(inputManager, events){
+		
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.P) || inputManager.isKeyPressedThisFrame(KeyboardKey.ESCAPE)){
+			this.pause = !this.pause;
+		}
+		if(this.pause){
+			return;
+		}
 		
 		if(this.timeLeft > 0){
 			this.timeLeft -= DT;
@@ -82,18 +102,54 @@ class IntroScene : AbstractScene{
 			}
 			
 		}else{
-			this.switchScene(new PlayScene(this.levelNames, this.index, this.lives, this.deadTankTiles, this.deadWallTiles));
+			this.switchScene(new PlayScene(this.levelNames, this.rgbShift, this.index, this.lives, this.deadTankTiles, this.deadWallTiles));
 		}
+		
+	}
+	
+	function drawIntro(){
+		
+		w = this.indexText.width;
+		if(w < this.levelNameText.width){
+			w = this.levelNameText.width;
+		}
+		if(w < this.livesText.width){
+			w = this.livesText.width;
+		}
+		h = 96 + this.livesText.height;
+		
+		x0 = (WIDTH/2) - (this.indexText.width/2);
+		x1 = (WIDTH/2) - (this.levelNameText.width/2);
+		x2 = (WIDTH/2) - (this.livesText.width/2);
+		y0 = (HEIGHT/2) - 48 - (this.indexText.height/2);
+		y1 = y0 + 48;
+		y2 = y1 + 48;
+		
+		x = x0;
+		if(x > x1){
+			x = x1;
+		}
+		if(x > x2){
+			x = x2;
+		}
+		
+		borderDraw(x, y0, w, h, 24, 10, this.rgbShift.clone(), this.alpha);
+		
+		this.indexText.drawWithAlpha(x0, y0, Math.floor(this.alpha));
+		this.levelNameText.drawWithAlpha(x1, y1, Math.floor(this.alpha));
+		this.livesText.drawWithAlpha(x2, y2, Math.floor(this.alpha));
 		
 	}
 	
 	function render(){
 		
-		Graphics2D.Draw.fill(BR, BG, BB);
+		Graphics2D.Draw.fill(BR+this.rgbShift[0], BG+this.rgbShift[1], BB+this.rgbShift[2]);
 		
-		this.indexText.drawWithAlpha((WIDTH/2) - (this.indexText.width/2), (HEIGHT/2) - 48 - (this.indexText.height/2), Math.floor(this.alpha));
-		this.levelNameText.drawWithAlpha((WIDTH/2) - (this.levelNameText.width/2), (HEIGHT/2) - (this.levelNameText.height/2), Math.floor(this.alpha));
-		this.livesText.drawWithAlpha((WIDTH/2) - (this.livesText.width/2), (HEIGHT/2) + 48 - (this.livesText.height/2), Math.floor(this.alpha));
+		this.drawIntro();
+		
+		if(this.pause){
+			pauseDraw();
+		}
 		
 	}
 	

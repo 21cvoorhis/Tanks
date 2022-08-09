@@ -19,7 +19,7 @@ class Mine : Object{
 	function updateMine(tanks){
 		
 		if(this.timeLeft > 0){
-			this.timeLeft = this.timeLeft - DT;
+			this.timeLeft -= DT;
 			this.collisionDie(tanks);
 			
 			if(this.timeLeft <= 2.0){

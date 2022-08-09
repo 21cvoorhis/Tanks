@@ -37,8 +37,10 @@ class BadTank : Tank{
 	field bodyW = Math.PI*DT*1.5; //angular velocities for linearly rotation
 	field gunW = Math.PI*DT/2.0;
 	
-	constructor(pos, radius, color, moveType, vel, shotType, maxShotTime, maxBullets, bulletSpeed, bulletBounces, plantType, maxPlantTime, maxMines, mineTime) : 
-	base(pos, radius, color, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime){
+	constructor(pos, radius, color, rgbShift, moveType, vel, shotType, maxShotTime, maxBullets, bulletSpeed, bulletBounces, plantType, maxPlantTime, maxMines, mineTime) : 
+	base(pos, radius, color, rgbShift, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime){
+		
+		this.rgbShift = rgbShift;
 		
 		this.initialTile = this.tile.clone();
 		
@@ -55,6 +57,7 @@ class BadTank : Tank{
 		
 		this.rotateTimeLeft = mix(5, 5*Random.randomFloat(), 0.75);
 		this.rotateDirection = Random.randomInt(0, 3);
+		
 	}
 	
 	//this should be updated to reflect the shooting behavior
