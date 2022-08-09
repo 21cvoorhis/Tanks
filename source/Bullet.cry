@@ -1,0 +1,212 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+//this.bulletSpecters.add(new BulletSpecter([bx, by], this.bulletR, [255, 255, 255], this.gAngle));
+
+class Bullet : Object{
+	
+	field rgbShift;
+	
+	field bouncesLeft; //how many times a bullet can hit a wall
+	field explode; //displays if the bullet should explode or not based on it's death
+	field specters; //effect for fast bullets
+	
+	constructor(pos, radius, color, rgbShift, vel, vAngle, bouncesLeft, specters) : base(pos, radius, color){
+		
+		this.rgbShift = rgbShift;
+		
+		this.vel = vel;
+		this.vAngle = vAngle;
+		
+		this.target[0] = Math.cos(vAngle);
+		this.target[1] = Math.sin(vAngle);
+		
+		this.timeLeft = 0.125;
+		
+		this.bouncesLeft = bouncesLeft;
+		this.specters = specters;
+		this.explode = false;
+	}
+	
+	//death is automatic after either a bounce or collision with a killing object
+	function updateBullet(wallSegmentsDict, tanks, holes){
+		this.collisionBounce(wallSegmentsDict);
+		this.collisionKill(tanks);
+		
+		this.timeLeft -= DT;
+		if(this.vel >= 200.0 && this.timeLeft < 0){
+			this.timeLeft = 0.125;
+			//only create a specter if not over a hole
+			try{
+				temp = holes[tileToIndex(this.tile)];
+			}catch(Core.KeyNotFoundException){
+				this.specters.add(new BulletSpecter(this.pos.clone(), this.r, this.color.clone(), this.rgbShift.clone(), this.vAngle));
+			}catch(Core.InvalidKeyException){}
+		}
+		
+	}
+	
+	//checks if bullet is in any walls, and if so checks collisions with valid wall segments
+	function collisionBounce(wallSegmentsDict){
+		
+		try{
+			tile = posToTile(this.prevPos);
+		}catch(Core.InvalidKeyException){
+			tile = posToTile(this.pos);
+		}
+		
+		try{
+			sList = wallSegmentsDict[tileToIndex(tile)];
+			
+			for(i = 0; i<sList.length; i++){
+				if(segmentSegmentCollision(sList[i], [this.prevPos, this.pos])){
+					this.bounce(sList[i]);
+					return null;
+				}
+			}
+		}catch(Core.KeyNotFoundException){}catch(Core.InvalidKeyException){
+			this.alive = false;
+			return null;
+		}
+		
+	}
+	
+	function bounce(s){
+		
+		if(this.bouncesLeft > 0){
+			
+			if(s[0][0] == s[1][0]){ //x are equal, x bounce
+				this.target[0] = -this.target[0];
+			}
+			if(s[0][1] == s[1][1]){
+				this.target[1] = -this.target[1];
+			}
+			
+			this.pos[0] = this.prevPos[0];
+			this.pos[1] = this.prevPos[1];
+			this.vAngle = Math.arctan(this.target[1], this.target[0]);
+			
+			this.bouncesLeft--;
+			
+		}else{
+			this.alive = false;
+			this.explode = true;
+			return null;
+		}
+		
+	}
+	
+	function collisionKill(tanks){
+		for(i = 0; i<tanks.length; i++){
+			if(circleQuadCollision(this.pos, this.r, tanks[i].bPoints) && tanks[i].alive){
+				this.alive = false;
+				return null;
+			}
+			for(j = 0; j<tanks[i].mines.length; j++){
+				if(circleCircleCollision(this.pos, this.r, tanks[i].mines[j].pos, tanks[i].mines[j].r)){
+					this.alive = false;
+					return null;
+				}
+			}
+			//extra conditions check that the bullet isn't just noting a collision with itself. They're put first so it doesn't have to check every bullet with itself every frame
+			for(j = 0; j<tanks[i].bullets.length; j++){
+				if((this.vAngle != tanks[i].bullets[j].vAngle) && (this.time != tanks[i].bullets[j].time) && circleCircleCollision(this.pos, this.r, tanks[i].bullets[j].pos, tanks[i].bullets[j].r)){
+					this.alive = false;
+					this.explode = true;
+					return null;
+				}
+			}
+		}
+	}
+	
+	function drawBullet(){
+		
+		buttPoints = [[],[],[],[]];
+		tempAngle = this.vAngle - (Math.PI/2);
+		buttPoints[0] = [(this.r*cos(tempAngle)) + this.pos[0], (this.r*sin(tempAngle)) + this.pos[1]];
+		buttPoints[1] = [(-1*this.r*cos(tempAngle)) + this.pos[0], (-1*this.r*sin(tempAngle)) + this.pos[1]];
+		
+		tempAngle = this.vAngle - Math.PI;
+		buttPoints[2] = [(1.25*this.r*cos(tempAngle)) + buttPoints[1][0], (1.25*this.r*sin(tempAngle)) + buttPoints[1][1]];
+		buttPoints[3] = [(1.25*this.r*cos(tempAngle)) + buttPoints[0][0], (1.25*this.r*sin(tempAngle)) + buttPoints[0][1]];
+		
+		for(i = 0; i<this.specters.length; i++){
+			this.specters[i].drawSpecter();
+		}
+		
+		//square butt
+		Graphics2D.Draw.quad(
+			buttPoints[0][0], buttPoints[0][1], 
+			buttPoints[1][0], buttPoints[1][1], 
+			buttPoints[2][0], buttPoints[2][1], 
+			buttPoints[3][0], buttPoints[3][1], 
+			this.color[0], this.color[1], this.color[2], this.color[3]);
+		//circle head
+		Graphics2D.Draw.ellipse(this.pos[0]-this.r, this.pos[1]-this.r, this.r*2, this.r*2, this.color[0], this.color[1], this.color[2], this.color[3]);
+		
+	}
+	
+}
+
+class BulletSpecter : Object{
+	
+	field rgbShift;
+	field mixColor;
+	field buttPoints;
+	
+	constructor(pos, radius, color, rgbShift, vAngle) : base(pos, radius, color){
+		
+		this.rgbShift = rgbShift;
+		
+		this.vAngle = vAngle;
+		
+		this.timeLeft = 1.0;
+		this.mixColor = [BR + rgbShift[0], BG + rgbShift[1], BB + rgbShift[2], 255];
+		
+		this.buttPoints = [[],[],[],[]];
+		tempAngle = this.vAngle - (Math.PI/2);
+		this.buttPoints[0] = [(this.r*cos(tempAngle)) + this.pos[0], (this.r*sin(tempAngle)) + this.pos[1]];
+		this.buttPoints[1] = [(-1*this.r*cos(tempAngle)) + this.pos[0], (-1*this.r*sin(tempAngle)) + this.pos[1]];
+		
+		tempAngle = this.vAngle - Math.PI;
+		this.buttPoints[2] = [(1.25*this.r*cos(tempAngle)) + this.buttPoints[1][0], (1.25*this.r*sin(tempAngle)) + this.buttPoints[1][1]];
+		this.buttPoints[3] = [(1.25*this.r*cos(tempAngle)) + this.buttPoints[0][0], (1.25*this.r*sin(tempAngle)) + this.buttPoints[0][1]];
+		
+	}
+	
+	//death is automatic after either a bounce or collision with a killing object
+	function updateSpecter(tanks){
+		
+		if(this.timeLeft > 0){
+			this.timeLeft -= DT;
+			this.color = mixColor(this.color, this.mixColor, 0.25);
+			
+			for(i = 0; i<tanks.length; i++){
+				for(j = 0; j<tanks[i].explosions.length; j++){
+					if(circleCircleCollision(this.pos, this.r, tanks[i].explosions[j].pos, tanks[i].explosions[j].r)){
+						this.alive = false;
+					}
+				}
+			}
+			
+		}else{
+			this.alive = false;
+		}
+		
+	}
+	
+	function drawSpecter(){
+		//square butt
+		Graphics2D.Draw.quad(
+			this.buttPoints[0][0], this.buttPoints[0][1], 
+			this.buttPoints[1][0], this.buttPoints[1][1], 
+			this.buttPoints[2][0], this.buttPoints[2][1], 
+			this.buttPoints[3][0], this.buttPoints[3][1], 
+			this.color[0], this.color[1], this.color[2], this.color[3]);
+		//circle head
+		Graphics2D.Draw.ellipse(this.pos[0]-this.r, this.pos[1]-this.r, this.r*2, this.r*2, this.color[0], this.color[1], this.color[2], this.color[3]);
+	}
+	
+}

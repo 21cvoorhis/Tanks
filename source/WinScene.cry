@@ -1,0 +1,63 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import TwoCansAlpha4;
+
+class WinScene : AbstractScene{
+	
+	field time = 0;
+	
+	field rgbShift = [63, 0, 64];
+	
+	field bOffset = 0;
+	
+	field winText;
+	field congratsText;
+	
+	constructor() : base(){
+		
+		this.winText = FontResource.fromSystem("Arial").getRenderer().setSize(48).setColor(0, 0, 0).setStyle(Graphics2DText.FontStyle.BOLD).render("You  W in!");
+		this.congratsText = FontResource.fromSystem("Arial").getRenderer().setSize(24).setColor(0, 0, 0).setStyle(Graphics2DText.FontStyle.BOLD).render("Congratulations :)");
+		
+	}
+	
+	function update(inputManager, events){
+		
+		this.time++;
+		
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.ENTER) || inputManager.isKeyPressedThisFrame(KeyboardKey.SPACE) || inputManager.didMouseClickHere(0,0, WIDTH, HEIGHT)){
+			this.switchSceneFade(new CreditsScene([1, 0, 0]));
+		}
+		
+		if(this.time%4 == 0){
+			this.rgbShift = rainbowRGBShift(this.rgbShift.clone());
+		}
+		
+	}
+	
+	function drawWin(){
+		
+		w = this.winText.width;
+		h = this.winText.height + this.congratsText.height;
+		
+		x0 = (WIDTH/2) - (this.winText.width/2);
+		x1 = (WIDTH/2) - (this.congratsText.width/2);
+		y0 = (HEIGHT/2) - (h/2);
+		y1 = (y0 + this.winText.height);
+		
+		borderDraw(x0, y0, w, h, 24, 16, [this.rgbShift[0]/2, this.rgbShift[1]/2, this.rgbShift[2]/2], 255);
+		
+		this.winText.draw(x0, y0);
+		this.congratsText.draw(x1, y1);
+		
+	}
+	
+	function render(){
+		
+		Graphics2D.Draw.fill(BR+this.rgbShift[0], BG+this.rgbShift[1], BB+this.rgbShift[2]);
+		this.bOffset = drawBackgroundDiagonals(this.bOffset, this.rgbShift);
+		this.drawWin();
+		
+	}
+	
+}

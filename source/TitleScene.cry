@@ -1,0 +1,164 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import TwoCansAlpha4;
+
+/*
+To Do
+- Add the ability to jump to later level sets?
+	- Getting to a new color unlocks the ability to jump to that level set from the menu
+	- It changes the color of the menu background when you mouse over it?
+	- Subtract 1 life for each 5 levels you're going ahead to? (starting in purple gives 2 lives, blue is 1, navy is 0 lives)
+- Level editor? Or at least a way to play a custom level formatted correctly
+	- If you go the text paste route have the screen explain how it works, and only accept it if it's the exact right length of text
+- Passwords Screen? This is where all the secrets would go
+	- Post some of the passwords on the ending screen of your original campaign, maybe some on the Wii remake too
+	- Create a "Passwords" class that generates an object at the start and passes that to PlayScene
+- Speedrun mode? After a player beats a campaign once put the time for that campaign under in on the menu, and display a timer in the top right for each level
+	- Timer should only run for in-game time, i.e. when the player tanks is in danger and ifhgting others (not when the scene is opening or transitioning)
+- Tank wiki?
+	- Little display for each tank and their abilities
+	- Z: Destroyer (tab down) Fast shot with a faster reload
+*/
+
+enum Route { PLAY, TUTORIAL, CREDITS }
+
+class Option{ //thanks Hydrogen777 :)
+	
+	field index;
+	field text;
+	field pos;
+	field route;
+	
+	constructor(index, text, route){
+		this.index = index;
+		this.text = FontResource.fromSystem("Bahnschrift").getRenderer().setSize(16).setColor(0, 0, 0).render(text);
+		this.pos =
+			[WIDTH/2 - this.text.width/2, 
+			HEIGHT/2 + 40*index - this.text.height/2 + 32];
+		this.route = route;
+	}
+	
+	function selected(inputManager){
+		if(inputManager.didMouseClickHere(this.pos[0], this.pos[1], this.text.width, this.text.height)) {
+			return true;
+		}
+		if(inputManager.isKeyPressed(KeyboardKey.SPACE) || inputManager.isKeyPressed(KeyboardKey.ENTER)) {
+			if(TitleScene.selection == this.index) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+class TitleScene : AbstractScene{
+	
+	field frame = 0;
+
+	field rgbShift;
+	field rainbowActive = false;
+	
+	field levelNames = ["1 Homage", "2 1v1", "3 Traction", "4 Quickscope", "5 Infiltration", 
+		"6 Mirror Match", "7 Gridlocked", "8 Wrecking Crew", "9 Between a Rock", "10 Mind The Gap", 
+		"11 Deja Vu", "12 Pipeline", "13 Infantry", "14 Strobogrammatic", "15 Group Project", 
+		"16 Cover", "17 Fish In A Barrel", "18 Line of Fire", "19 Fairy Chess", "20 Bullet Time"];
+	field lives = 3;
+	
+	field options;
+	static field selection = 0;
+	
+	field bOffset = 0; //controls offset of the background lines so they move cleanly
+	
+	field titleText;
+	
+	constructor(rgbShift) : base(){
+		
+		this.rgbShift = rgbShift.clone();
+		if(this.rgbShift[0] == 1){
+			this.rainbowActive = true;
+			this.rgbShift = [63, 0, 64];
+		}
+		
+		this.titleText = FontResource.fromSystem("Arial").getRenderer().setSize(48).setColor(0, 0, 0).setStyle(Graphics2DText.FontStyle.BOLD).render("T A N K S !");
+		
+		this.options = [];
+		this.options.add(new Option(0, "Play!", Route.PLAY));
+		this.options.add(new Option(1, "How To Play", Route.TUTORIAL));
+		this.options.add(new Option(2, "Credits", Route.CREDITS));
+		
+	}
+	
+	function update(inputManager, events){
+		
+		this.frame++;
+		
+		if(this.rainbowActive && this.frame%6 == 0){
+			this.rgbShift = rainbowRGBShift(this.rgbShift.clone());
+		}
+		
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.UP) || inputManager.isKeyPressedThisFrame(KeyboardKey.W)){
+			TitleScene.selection = (TitleScene.selection - 1) % this.options.length;
+		}
+		if(inputManager.isKeyPressedThisFrame(KeyboardKey.DOWN) || inputManager.isKeyPressedThisFrame(KeyboardKey.S)){
+			TitleScene.selection = (TitleScene.selection + 1) % this.options.length;
+		}
+		
+		for(i = 0; i < this.options.length; ++i){
+			if(this.options[i].selected(inputManager)){
+				TitleScene.selection = i;
+				switch(this.options[i].route){
+					case Route.PLAY:
+						//this.switchSceneFade(new WinScene());
+						this.switchSceneFade(new IntroScene(this.levelNames, this.rgbShift, 0, this.lives, [], []));
+						break;
+					case Route.TUTORIAL:
+						this.switchSceneFade(new PlayScene(["!tutorial"], [0, 0, 0], 0, 0, [], []));
+						break;
+					case Route.CREDITS:
+						if(this.rainbowActive){
+							this.switchSceneFade(new CreditsScene([1, 0, 0]));
+						}else{
+							this.switchSceneFade(new CreditsScene(this.rgbShift.clone()));
+						}
+						break;
+				}
+				return;
+			}
+		}
+		
+	}
+	
+	function drawTitle(){
+		
+		//starting height and width for the title text
+		w = this.titleText.width;
+		h = this.titleText.height-8;
+		
+		//top left coordinates of the text
+		x = (WIDTH/2) - (w/2);
+		y = 64;
+		
+		borderDraw(x, y, w, h, 24, 20, this.rgbShift.clone(), 255);
+		
+		this.titleText.draw(x, y);
+		
+	}
+	
+	function render(){
+		
+		Graphics2D.Draw.fill(BR+this.rgbShift[0], BG+this.rgbShift[1], BB+this.rgbShift[2]);
+		this.bOffset = drawBackgroundDiagonals(this.bOffset, this.rgbShift);
+		this.drawTitle();
+		
+		for(i = 0; i < this.options.length; ++i){
+			option = this.options[i];
+			if(i == TitleScene.selection){
+				Graphics2D.Draw.rectangle(option.pos[0], option.pos[1]-5, option.text.width, option.text.height+5, BR+35+this.rgbShift[0], BG+35+this.rgbShift[1], BB+35+this.rgbShift[2]);
+			}
+			option.text.draw(option.pos[0], option.pos[1]);
+		}
+		
+	}
+	
+}

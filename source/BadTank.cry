@@ -1,0 +1,492 @@
+import Graphics2D;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+/*
+To do:
+- Shooting
+	- Lead: Aim at where the player will be (lead the shot). Calculate this with an expanding circle of aim (based on time) and the estimated position of the tank keeping it's current velocity (also based on time)
+- Movement
+	- Smart: Same as distance, but if you're near a mine, swap back to normal movement
+*/
+
+class BadTank : Tank{
+	
+	field initialTile;
+	
+	field collisionCount = 0;
+	
+	field fleeDistance = 48; //only modify this in the constructor this if a single number is too broad to work
+	field moveType;
+	field moveTimeLeft = 0.0;
+	field normalPathing = false;
+	field path = [];
+	
+	field shotType;
+	field maxShotTime;
+	field shotTimeLeft;
+	field shotPos = null;
+	
+	field plantType;
+	field maxPlantTime;
+	field plantTimeLeft;
+	
+	field rotateTimeLeft = 0.0;
+	field rotateDirection; //0 = none, 1 = clockwise, 2 = counterclockwise
+	field bodyW = Math.PI*DT*1.5; //angular velocities for linearly rotation
+	field gunW = Math.PI*DT/2.0;
+	
+	constructor(pos, radius, color, rgbShift, moveType, vel, shotType, maxShotTime, maxBullets, bulletSpeed, bulletBounces, plantType, maxPlantTime, maxMines, mineTime) : 
+	base(pos, radius, color, rgbShift, vel, maxBullets, bulletSpeed, bulletBounces, maxMines, mineTime){
+		
+		this.rgbShift = rgbShift;
+		
+		this.initialTile = this.tile.clone();
+		
+		this.moveType = moveType;
+		
+		this.shotType = shotType;
+		this.maxShotTime = maxShotTime;
+		this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5)/2.0;
+		this.shotTimeLeft = maxShotTime/2.0;
+		
+		this.plantType = plantType;
+		this.maxPlantTime = maxPlantTime;
+		this.plantTimeLeft = mix(this.maxPlantTime, this.maxPlantTime * Random.randomFloat(), 0.5);
+		
+		this.rotateTimeLeft = mix(5, 5*Random.randomFloat(), 0.75);
+		this.rotateDirection = Random.randomInt(0, 3);
+		
+	}
+	
+	//this should be updated to reflect the shooting behavior
+	function updateBadTank(walls, wallSegments, wallSegmentsDict, holesDict, tanks, tankSpecters, nodes){
+		
+		player = tanks[tanks.length-1];
+		
+		if(this.alive){
+			
+			if(this.tankCollision){
+				this.collisionCount++;
+			}else{
+				this.collisionCount = 0;
+			}
+			
+			this.shotTimeLeft -= DT;
+			this.plantTimeLeft -= DT;
+			this.moveTimeLeft -= DT;
+			this.rotateTimeLeft -= DT;
+			
+			if(player.alive){
+				this.bodyCollisionDie(tanks, tankSpecters);
+			}
+			this.bodyCollisionWalls(wallSegmentsDict, holesDict);
+			
+			if(this.vAngle != null){
+				this.bAngle = smoothRotate(this.bAngle, this.vAngle);
+			}
+			
+			if(player.alive){
+				
+				//decide vAngle for next frame with movement function
+				switch (this.moveType) {
+					case MoveType.DIRECT:
+						this.directMove(player, nodes);
+						break;
+					case MoveType.RANDOM:
+						this.randomMove(tanks, nodes);
+						break;
+					case MoveType.DISTANCE:
+						this.distanceMove(wallSegments, tanks, nodes);
+						break;
+					case MoveType.NORMAL:
+						this.normalMove(tanks, nodes);
+						break;
+				}
+				
+				//shooting functions
+				switch (this.shotType) {
+					case ShotType.NONE:
+						this.rotateGun();
+						break;
+					case ShotType.DIRECT:
+						this.directShot(walls, wallSegments, tanks, player);
+						break;
+					case ShotType.BANKED:
+						this.bankedShot(walls, wallSegments, tanks, player);
+						break;
+				}
+				
+				//planting functions
+				switch (this.plantType) {
+					case PlantType.YES:
+						this.yesPlant();
+						break;
+				}
+				
+			}else{
+				this.rotateGun();
+				this.vAngle = null;
+			}
+			
+		}
+		
+	}
+	
+	function turnBody(current, target, w){
+		
+		if(current == null){
+			return target;
+		}
+		
+		if(Math.abs(current-target) > Math.PI){
+			if(target > 0){
+				target = target - (2*Math.PI);
+			}else{
+				target = target + (2*Math.PI);
+			}
+		}
+		
+		if(Math.abs(current-target) > Math.PI/2.1){
+			return mix(current, target, 0.3);
+		}
+		
+		if(Math.abs(current - target) < w){
+			return target;
+		}else if(current > target){
+			return linearRotate(current, w*-1.0);
+		}else{
+			return linearRotate(current, w);
+		}
+		
+	}
+	
+	function directMove(target, nodes){
+		
+		if((!listsEqual(this.tile, target.tile)) && ((this.path.length == 0) || !listsEqual(target.tile, this.path[this.path.length-1].tile))){
+			this.path = this.findPath(findNode(this.tile, nodes), findNode(target.tile, nodes), nodes);
+		}
+		
+		if(this.path.length == 0){
+			this.vAngle = null;
+		}else{
+			if(listsEqual(this.path[0].tile, this.tile) && Math.abs(this.pos[0]-this.path[0].pos[0]) < 10 && Math.abs(this.pos[1]-this.path[0].pos[1]) < 10){
+				this.path.remove(0);
+			}
+			try{
+				this.target[0] = this.path[0].pos[0] - this.pos[0];
+				this.target[1] = this.path[0].pos[1] - this.pos[1];
+				this.vAngle = this.turnBody(this.vAngle, Math.arctan(this.target[1], this.target[0]), this.bodyW);
+			}catch(Core.IndexOutOfRangeException){
+				this.vAngle = null;
+			}
+		}
+		
+		if(this.moveTimeLeft <= 0){
+			this.moveTimeLeft = mix(5, 5*Random.randomFloat(), 0.5);
+		}
+		
+	}
+	
+	function randomMove(tanks, nodes){
+		
+		if((this.moveTimeLeft <= 0) || (this.path.length == 0) || this.collisionCount >= 5){
+			target = nodes[nodes.keys().choice()];
+			this.path = this.findPath(findNode(this.tile, nodes), findNode(target.tile, nodes), nodes);
+			this.moveTimeLeft = mix(5, 5*Random.randomFloat(), 0.5);
+			this.collisionCount = 0;
+		}
+		
+		if(this.path.length == 0){
+			this.vAngle = null;
+		}else{
+			if(listsEqual(this.path[0].tile, this.tile) && Math.abs(this.pos[0]-this.path[0].pos[0]) < 10.0 && Math.abs(this.pos[1]-this.path[0].pos[1]) < 10.0){
+				this.path.remove(0);
+			}
+			try{
+				this.target[0] = this.path[0].pos[0] - this.pos[0];
+				this.target[1] = this.path[0].pos[1] - this.pos[1];
+				this.vAngle = this.turnBody(this.vAngle, Math.arctan(this.target[1], this.target[0]), this.bodyW);
+			}catch(Core.IndexOutOfRangeException){
+				this.vAngle = null;
+			}
+		}
+		
+	}
+	
+	function distanceMove(wallSegments, tanks, nodes){
+		
+		player = tanks[tanks.length-1];
+		
+		shot = this.clearShot(wallSegments, tanks, this.pos, player.pos, null);
+		
+		if(this.moveTimeLeft <= 0){
+			if(shot){
+				this.normalPathing = false;
+			}else{
+				this.normalPathing = true;
+			}
+			this.moveTimeLeft = mix(3, 3*Random.randomFloat(), 0.5);
+		}
+		
+		if(this.normalPathing){
+			this.directMove(player, nodes);
+		}else{
+			this.vAngle = null;
+		}
+		
+	}
+	
+	function normalMove(tanks, nodes){
+		
+		player = tanks[tanks.length-1];
+		rand = Random.randomFloat();
+		
+		if(this.moveTimeLeft <= 0){
+			if(!this.normalPathing || rand <= 0.6){
+				this.normalPathing = true;
+			}else{
+				this.normalPathing = false;
+			}
+		}
+		
+		if(this.normalPathing){
+			this.directMove(player, nodes);
+		}else{
+			this.randomMove(tanks, nodes);
+		}
+		
+	}
+	
+	function findPath(startNode, endNode, nodes){
+		
+		nextNodes = [[startNode, 0]]; //each term is the node and the cost to get to that node
+		
+		cameFrom = {};
+		cameFrom[startNode] = null;
+		
+		pathCost = {};
+		pathCost[startNode] = 0;
+		
+		path = [];
+		
+		while(nextNodes.length > 0){
+			
+			current = nextNodes[0][0];
+			currentIndex = 0;
+			lowestCost = nextNodes[0][1];
+			for(i = 0; i<nextNodes.length; i++){
+				if(lowestCost > nextNodes[i][1]){
+					current = nextNodes[i][0];
+					currentIndex = i;
+					lowestCost = nextNodes[i][1];
+				}
+			}
+			
+			if(current == endNode){
+				break;
+			}
+			
+			for(i = 0; i<current.neighbors.length; i++){
+				
+				next = current.neighbors[i];
+				newCost = pathCost[current] + next.weight;
+				
+				if(!pathCost.contains(next) || newCost < pathCost[next]){
+					
+					pathCost[next] = newCost;
+					nextNodes.add([next, newCost + next.heuristic(startNode, endNode)]);
+					cameFrom[next] = current;
+				}
+				
+			}
+			
+			nextNodes.remove(currentIndex);
+			
+		}
+		
+		current = endNode;
+		
+		if(cameFrom.get(current) == null){
+			return [];
+		}
+		
+		while(cameFrom[current] != null){
+			path.add(current);
+			current = cameFrom[current];
+		}
+		
+		path.reverse();
+		return path;
+		
+	}
+	
+	function rotateGun(){
+	
+		if(this.vAngle == null){ //tank is stationary, rotate quasi randomly
+		
+			if(this.rotateDirection == 1){
+				this.gAngle = linearRotate(this.gAngle, -1.0 * this.gunW);
+			}else if(this.rotateDirection == 2){
+				this.gAngle = linearRotate(this.gAngle, this.gunW);
+			}
+			
+			if(this.rotateTimeLeft <= 0){
+				if(this.rotateDirection == 0){
+					this.rotateDirection = Random.randomInt(1, 3);
+				}else{
+					this.rotateDirection = 0;
+				}
+				this.rotateTimeLeft = mix(3, 3*Random.randomFloat(), 0.5);
+			}
+			
+		}else{ //tank isn't stationary, follow the tank's movement
+			
+			this.gAngle = this.turnGun(this.gAngle, this.vAngle, this.gunW*2.0);
+			
+		}
+		
+	}
+	
+	function turnGun(current, target, w){
+		
+		//no target
+		if(current == null){
+			return target;
+		}
+		
+		//adjust if you're around the other end of the circle
+		if(Math.abs(current-target) > Math.PI){
+			if(target > 0){
+				target = target - (2*Math.PI);
+			}else{
+				target = target + (2*Math.PI);
+			}
+		}
+		
+		//drag the gun along if you're turning a lot, otherwise spin normally
+		if(this.moveType != MoveType.NONE && Math.abs(current-target) > Math.PI/3.0){
+			return smoothRotate(current, target);
+		}else if(Math.abs(current - target) < w){
+			return target;
+		}else if(current > target){
+			return linearRotate(current, w*-1.0);
+		}else{
+			return linearRotate(current, w);
+		}
+		
+	}
+	
+	function clearShot(wallSegments, tanks, sourcePos, targetPos, exclude){ //exclude is one passed segment to ignore
+		
+		for(s : wallSegments){
+			if(s != exclude && segmentSegmentCollision(s, [sourcePos, targetPos])){
+				return false;
+			}
+		}
+		for(i = 0; i<tanks.length-1; i++){
+			if(tanks[i].pos != this.pos && tanks[i].alive && circleSegmentCollision(tanks[i].pos, tanks[i].r, [sourcePos, targetPos])){
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	function directShot(walls, wallSegments, tanks, player){
+		
+		sAngle = Math.arctan(player.pos[1]-this.pos[1], player.pos[0]-this.pos[0]);
+		count = 0;
+		
+		if(this.clearShot(wallSegments, tanks, this.pos, player.pos, null)){ //you have a clear shot
+			
+			if(this.moveType == MoveType.NONE){
+				this.gAngle = this.turnGun(this.gAngle, sAngle, this.gunW);
+			}else{
+				this.gAngle = this.turnGun(this.gAngle, sAngle, this.gunW*2.0);
+			}
+			
+			//take the shot if the gAngle is close to sAngle and the shotTimer is done
+			if(this.shotTimeLeft <= 0 && Math.abs(this.gAngle - sAngle) < 0.01){
+				this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
+				this.shoot(walls);
+				return null;
+			}
+		}else{
+			this.rotateGun();
+			return null;
+		}
+		
+	}
+	
+	function bankedShot(walls, wallSegments, tanks, player){
+		
+		if(this.shotTimeLeft <= 0 && this.shotPos == null){
+			
+			sAngle = 0.0;
+			target = player.pos.clone();
+			bouncePoints = [];
+			validWallSegments = [];
+			
+			for(s : wallSegments){
+				
+				target = player.pos.clone();
+				// determine if wall is x or y and reflect appropriately
+				if(s[0][0] == s[1][0]){ //segment x's are the same, reflect the x value
+					
+					target[0] += 2*(s[0][0] - target[0] + 0.00001); //nudged to avoid the target falling on the same axis as this.pos
+					
+				}else if(s[0][1] == s[1][1]){ //segment y's are the same, reflect the y value
+					
+					target[1] += 2*(s[0][1] - target[1] + 0.00001);
+					
+				}
+				
+				if(segmentSegmentCollision(s, [this.pos, target])){
+					validWallSegments.add(s);
+					bouncePoints.add(segmentSegmentIntersection(s, [this.pos, target]));
+				}
+				
+			}
+			
+			for(i = 0; i < validWallSegments.length; i++){
+				s = validWallSegments[i];
+				b = [bouncePoints[i][0] + 0.00001, bouncePoints[i][1] + 0.00001];
+				
+				//check for a clear shot to the player, and make sure the gun won't be shooting into a wall or the shot won't reflect back into the tank shooting
+				if(this.clearShot(wallSegments, tanks, this.pos, b, s) && this.clearShot(wallSegments, tanks,  b, player.pos, s) && !circleSegmentCollision(this.pos, this.r*1.5, s) && !circleSegmentCollision(this.pos, this.collisionR, [b, player.pos])){
+					this.shotPos = b;
+				}
+			}
+			
+			this.shotTimeLeft = mix(1.0, 1.0 * Random.randomFloat(), 0.8); //without this it runs every frame to find a target
+		}
+		
+		if(this.shotPos != null){
+			
+			sAngle = Math.arctan(this.shotPos[1]-this.pos[1], this.shotPos[0]-this.pos[0]);
+			this.gAngle = this.turnGun(this.gAngle, sAngle, this.gunW);
+			if(Math.abs(this.gAngle - sAngle) < 0.01){
+				this.shotTimeLeft = mix(this.maxShotTime, this.maxShotTime * Random.randomFloat(), 0.5); //mix percent is how random the shots are
+				this.shoot(walls);
+				this.shotPos = null;
+			}
+			
+		}else{
+			this.directShot(walls, wallSegments, tanks, player); //if all else fails, try a direct shot
+			return null;
+		}
+		
+	}
+	
+	function yesPlant(){
+		
+		if(this.plantTimeLeft <= 0){
+			this.plant();
+			this.plantTimeLeft = mix(this.maxPlantTime, this.maxPlantTime * Random.randomFloat(), 0.5);
+		}
+		
+	}
+	
+}
